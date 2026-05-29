@@ -491,23 +491,22 @@ class StarCryoControlGUI:
         ttk.Combobox(feedback_frame, textvariable=self.fb_target, 
                     values=["SQUID Array", "Input SQUID"], width=12).grid(row=0, column=1, pady=5)       
         ttk.Label(feedback_frame, text="FEEDBACK:").grid(row=1, column=0, sticky="w", pady=5)
-        self.feedback = tk.StringVar(value="100kΩ")
+        self.feedback = tk.StringVar(value="100 kΩ")
         ttk.Combobox(feedback_frame, textvariable=self.feedback, 
                     values=["10 kΩ","30 kΩ", "100 kΩ"], width=12).grid(row=1, column=1, pady=5)
         ttk.Button(feedback_frame, text="Set", command=self.set_feedback_resistor, width=5).grid(row=1, column=2, padx=5)
         
         ttk.Label(feedback_frame, text="PID Cap:").grid(row=2, column=0, sticky="w", pady=5)
-        self.set_integrator = tk.StringVar(value="10 nF")
-        ttk.Combobox(feedback_frame, textvariable=self.set_integrator, 
+        self.pid_cap_var = tk.StringVar(value="10 nF")
+        ttk.Combobox(feedback_frame, textvariable=self.pid_cap_var, 
                     values=["10 nF", "100 nF"], width=12).grid(row=2, column=1, pady=5)
-        ttk.Button(feedback_frame, text="Set", command=self.set_integrator, width=5).grid(row=2, column=2, padx=5)
-
+        ttk.Button(feedback_frame, text="Set", command=self.set_pid_cap, width=5).grid(row=2, column=2, padx=5)
 
         ttk.Label(feedback_frame, text="PID Res:").grid(row=3, column=0, sticky="w", pady=5)
-        self.integrator = tk.StringVar(value="10 kΩ")
-        ttk.Combobox(feedback_frame, textvariable=self.integrator, 
+        self.pid_res_var = tk.StringVar(value="10 kΩ")
+        ttk.Combobox(feedback_frame, textvariable=self.pid_res_var, 
                     values=["10 kΩ", "20 kΩ"], width=12).grid(row=3, column=1, pady=5)
-        ttk.Button(feedback_frame, text="Set", command=self.set_integrator, width=5).grid(row=3, column=2, padx=5)
+        ttk.Button(feedback_frame, text="Set", command=self.set_pid_res, width=5).grid(row=3, column=2, padx=5)
 
 
         # 测试信号配置
@@ -1265,6 +1264,56 @@ class StarCryoControlGUI:
                 if self.serial_comm.is_connected:
                     # 发送物理字节
                     self.serial_comm.serial_port.write(raw_bytes)
+                    
+    def set_pid_cap(self):
+        """单独下发 PID 电容设定指令"""
+        cap_val = self.pid_cap_var.get()
+        self.is_modified = True
+        
+        # 解析数据位 (15-0 bit)
+        if cap_val == "10 nF":
+            data_16bit = "0000000000000001"  # 1
+        elif cap_val == "100 nF":
+            data_16bit = "0000000000000010"  # 2
+        else:
+            data_16bit = "0000000000000001"  # 默认兜底
+            
+        # 遍历勾选通道发送
+        for ch in self.get_selected_channels():
+            # 命令类型: 01 (反馈), 命令对象: 00 (PID设置)
+            bin_str, raw_bytes = self.build_fpga_command_binary("01", "00", ch, data_16bit)
+            
+            log_display = f"{bin_str[0:8]} {bin_str[8:16]} {bin_str[16:24]} {bin_str[24:32]}"
+            self.log_operation("Set PID Cap", {"channel": ch, "value": cap_val, "BIN": log_display})
+            
+            if self.serial_comm.is_connected:
+                self.serial_comm.serial_port.write(raw_bytes)
+                time.sleep(0.01)
+
+    def set_pid_res(self):
+        """单独下发 PID 电阻设定指令"""
+        res_val = self.pid_res_var.get()
+        self.is_modified = True
+        
+        # 解析数据位 (15-0 bit)
+        if res_val == "10 kΩ":
+            data_16bit = "0000000000000011"  # 3
+        elif res_val == "20 kΩ":
+            data_16bit = "0000000000000100"  # 4
+        else:
+            data_16bit = "0000000000000011"  # 默认兜底
+            
+        # 遍历勾选通道发送
+        for ch in self.get_selected_channels():
+            # 命令类型: 01 (反馈), 命令对象: 00 (PID设置)
+            bin_str, raw_bytes = self.build_fpga_command_binary("01", "00", ch, data_16bit)
+            
+            log_display = f"{bin_str[0:8]} {bin_str[8:16]} {bin_str[16:24]} {bin_str[24:32]}"
+            self.log_operation("Set PID Res", {"channel": ch, "value": res_val, "BIN": log_display})
+            
+            if self.serial_comm.is_connected:
+                self.serial_comm.serial_port.write(raw_bytes)
+                time.sleep(0.01)                    
                     
     def zero_restore_squid(self):
         """SQUID参数归零/恢复"""
