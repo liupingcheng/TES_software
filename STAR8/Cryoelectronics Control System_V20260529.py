@@ -1241,11 +1241,11 @@ class StarCryoControlGUI:
                 target_8bit = "00001111"  # 目标：Input SQUID 模块
                 
             # 2. 后8位：根据电阻下拉框获取具体动作
-            if resistor == "10kOhm":
+            if resistor == "10 kΩ":
                 action_8bit = "00011111" # 反馈电阻1
-            elif resistor == "30kOhm":
+            elif resistor == "30 kΩ":
                 action_8bit = "00101111" # 反馈电阻2
-            elif resistor == "100kOhm":
+            elif resistor == "100 kΩ":
                 action_8bit = "00111111" # 反馈电阻3
             else:
                 action_8bit = "00011111" # 默认兜底
@@ -1457,7 +1457,7 @@ class StarCryoControlGUI:
         self.a_flux.set(0.0)
         self.offset.set(0.0)
         self.sensitivity.set("High")
-        self.feedback.set("100kOhm")
+        self.feedback.set("100 kΩ")
         self.integrator.set("1.5nF")
         self.test_input.set("Array Flux")
         self.heat_time.set(2.0)
@@ -1509,7 +1509,7 @@ class StarCryoControlGUI:
                 self.a_flux.set(params.get("a_flux", 0.0))
                 self.offset.set(params.get("offset", 0.0))
                 self.sensitivity.set(params.get("sensitivity", "High"))
-                self.feedback.set(params.get("feedback", "100kOhm"))
+                self.feedback.set(params.get("feedback", "100 kΩ"))
                 self.integrator.set(params.get("integrator", "1.5nF"))
                 self.test_input.set(params.get("test_input", "Array Flux"))
                 self.heat_time.set(params.get("heat_time", 2.0))
