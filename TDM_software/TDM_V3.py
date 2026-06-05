@@ -9,14 +9,12 @@ import socket
 import struct
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QScrollArea, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
-                             QMessageBox)
+                             QMessageBox,QFrame)
+# pyrefly: ignore [missing-import]
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont
 
 # ================= 安全交互控件=================
-#尽量保证参数安全
-from PyQt5.QtCore import Qt # 确保导入了 Qt，用来识别回车键和ESC键
-
 # 1. 下拉框：只屏蔽滚轮误触
 class QComboBox(_QComboBox):
     def wheelEvent(self, event):
@@ -339,8 +337,7 @@ class BiasBoardWidget(QWidget):
         layout1.addWidget(QLabel("SA phix 输出值"), 1, 5)
         
         # 【画一条贯穿上下的竖线作为视觉隔离】
-        from PyQt5.QtWidgets import QFrame
-        vline = QFrame()
+        vline = QFrame()            
         vline.setFrameShape(QFrame.VLine)
         vline.setFrameShadow(QFrame.Sunken)
         vline.setStyleSheet("color: #CCCCCC;") # 淡淡的灰色
@@ -532,7 +529,6 @@ class BiasBoardWidget(QWidget):
         layout.addWidget(QLabel("IS phib 输出值"), 1, 5)
         
         # --- 画一根纵贯南北的灰色分割线 ---
-        from PyQt5.QtWidgets import QFrame
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine)
         vline.setFrameShadow(QFrame.Sunken)
@@ -1490,7 +1486,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("offset 开关"), 1, 4)
         layout.addWidget(QLabel("offset 值"), 1, 5)
         
-        from PyQt5.QtWidgets import QFrame
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine)
         vline.setStyleSheet("color: #CCCCCC;")
@@ -1607,7 +1602,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("offset 开关"), 1, 4)
         layout.addWidget(QLabel("offset 值"), 1, 5)
         
-        from PyQt5.QtWidgets import QFrame
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine)
         vline.setStyleSheet("color: #CCCCCC;")
@@ -1720,7 +1714,6 @@ class MainWindow(QMainWindow):
         dac_layout.addWidget(QLabel("offset 值"), 1, 5)
         
         # 画贯穿 20 行的垂直分割线
-        from PyQt5.QtWidgets import QFrame
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine)
         vline.setStyleSheet("color: #CCCCCC;")
