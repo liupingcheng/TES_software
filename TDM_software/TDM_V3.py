@@ -133,53 +133,49 @@ class BiasBoardWidget(QWidget):
         
     def init_ui(self):
         layout = QVBoxLayout()
-        self.setLayout(layout)
-        # title_label = QLabel(f"偏置源板卡 {self.board_id + 1}")
-        # title_label.setFont(QFont("Arial", 12, QFont.Bold))
-        # layout.addWidget(title_label)
         
-        #直流交流切换下拉框
+        # ================= 1. 信号类型切换 =================
         ac_dc_group = QGroupBox("信号类型")
         ac_dc_layout = QHBoxLayout()
-        self.signal_type = QComboBox()
+        self.signal_type = _QComboBox()
         self.signal_type.addItems(["直流", "交流"])
-        ac_dc_layout.addWidget(QLabel("信号类型"))
+        ac_dc_layout.addWidget(QLabel("信号类型:"))
         ac_dc_layout.addWidget(self.signal_type)
         ac_dc_layout.addStretch()
         ac_dc_group.setLayout(ac_dc_layout)
         layout.addWidget(ac_dc_group)
         
-        #交流参数设置
+        # ================= 2. 交流参数设置 =================
         self.ac_params_group = QGroupBox("交流信号参数")
         ac_layout = QGridLayout()
         
-        ac_layout.addWidget(QLabel("波形类型"), 0, 0)
-        self.waveform_type = QComboBox()
-        self.waveform_type.addItems(["正弦波", "方波", "三角波"])
+        ac_layout.addWidget(QLabel("波形类型:"), 0, 0)
+        self.waveform_type = _QComboBox()
+        self.waveform_type.addItems(["正弦波", "三角波", "方波"])
         ac_layout.addWidget(self.waveform_type, 0, 1)
         
-        ac_layout.addWidget(QLabel("频率"), 1, 0)
-        self.frequency = QDoubleSpinBox()
+        ac_layout.addWidget(QLabel("频率:"), 1, 0)
+        self.frequency = _QDoubleSpinBox()
         self.frequency.setRange(0.1, 10000)
         self.frequency.setValue(1000)
         self.frequency.setSuffix(" Hz")
         ac_layout.addWidget(self.frequency, 1, 1)
         
-        ac_layout.addWidget(QLabel("幅值："), 2, 0)
-        self.amplitude = QDoubleSpinBox()
+        ac_layout.addWidget(QLabel("幅值:"), 2, 0)
+        self.amplitude = _QDoubleSpinBox()
         self.amplitude.setRange(0, 1000)
-        self.amplitude.setValue(100)
+        self.amplitude.setValue(10)
         self.amplitude.setSuffix(" μA")
         ac_layout.addWidget(self.amplitude, 2, 1)
         
         self.ac_params_group.setLayout(ac_layout)
         layout.addWidget(self.ac_params_group)
         
-        #DC参数设置
+        # ================= 3. 直流参数设置 =================
         self.dc_params_group = QGroupBox("直流信号参数")
         dc_layout = QHBoxLayout()
-        dc_layout.addWidget(QLabel("电流"))
-        self.dc_value = QDoubleSpinBox()
+        dc_layout.addWidget(QLabel("直流电流:"))
+        self.dc_value = _QDoubleSpinBox()
         self.dc_value.setRange(-1000, 1000)
         self.dc_value.setValue(0)
         self.dc_value.setSuffix(" μA")
@@ -188,34 +184,43 @@ class BiasBoardWidget(QWidget):
         self.dc_params_group.setLayout(dc_layout)
         layout.addWidget(self.dc_params_group)
         
-        #根据选择的信号类型显示对应的参数设置
-        self.signal_type.currentTextChanged.connect(self.on_signal_type_changed)
+        # 必须先将上述基础组件设置为整个窗口的 Layout
+        self.setLayout(layout)
+        
+        # ================= 4. 根据板卡ID动态加载底部矩阵 =================
         if self.board_id == 0:
-            self.setup_board1_channels()  # 第一块板卡
+            self.setup_board1_channels()
         elif self.board_id == 1:
             self.setup_board2_channels()
-            pass  
-        elif self.board_id == 2:
+        else:
             self.setup_board3_channels()
-            pass
             
-        layout.addStretch()
+        # 加上弹性空间，把上面的组件全都往上顶
+        self.layout().addStretch()
         
+        # ================= 5. 【极其关键】绑定事件并强制触发一次 =================
+        self.signal_type.currentTextChanged.connect(self.on_signal_type_changed)
+        # 这一句必须在所有 UI 都构建完毕之后执行，强制根据当前的文字（"直流"）进行一波显示/隐藏！
+        self.on_signal_type_changed(self.signal_type.currentText())
         
     def on_signal_type_changed(self, signal_type):
         """信号类型切换时，动态显示/隐藏相关参数"""
         if signal_type == "交流":
             self.ac_params_group.show()
             self.dc_params_group.hide()
-            # 【新增】：如果是板卡1，且方波组已经创建，则显示它
+            
+            # 如果是板卡1，且方波组已经成功创建，则显示它
             if self.board_id == 0 and hasattr(self, 'square_wave_group'):
                 self.square_wave_group.show()
         else:
+            # 直流模式下：隐藏交流参数，显示直流参数
             self.ac_params_group.hide()
             self.dc_params_group.show()
-            # 【新增】：如果是板卡1，隐藏方波组
+            
+            # 如果是板卡1，隐藏方波组
             if self.board_id == 0 and hasattr(self, 'square_wave_group'):
                 self.square_wave_group.hide()
+
     def setup_board1_channels(self):
         """设置第一块板卡 (Board 0) 的通道控制"""
         # ================= 1. TES 信号控制区 =================
@@ -1272,12 +1277,12 @@ class MainWindow(QMainWindow):
         btn_layout.addStretch()
         storage_layout.addLayout(btn_layout)
         
-        # 第四行：专属数据日志框
-        self.data_log = QTextEdit()
-        self.data_log.setReadOnly(True)
-        # 用蓝色背景，把它和底部的全局灰色日志区分开
-        self.data_log.setStyleSheet("background-color: #F0F8FF; font-family: Consolas;") 
-        storage_layout.addWidget(self.data_log)
+        # # 第四行：专属数据日志框
+        # self.data_log = QTextEdit()
+        # self.data_log.setReadOnly(True)
+        # # 用蓝色背景，把它和底部的全局灰色日志区分开
+        # self.data_log.setStyleSheet("background-color: #F0F8FF; font-family: Consolas;") 
+        # storage_layout.addWidget(self.data_log)
         
         storage_group.setLayout(storage_layout)
         top_h_layout.addWidget(storage_group, stretch=3) # 占 3 份宽度
