@@ -10,7 +10,7 @@ import struct
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QScrollArea, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
                              QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QBrush, QColor
 
 # ================= 安全交互控件=================
@@ -91,7 +91,7 @@ class PIDCellWidget(QFrame):
     """
     智能 PID 单元格卡片：
     - 单击：发送预选中信号 (浅红色)
-    - 双击：立即切换状态，并解除预选
+    - 双击：立即切换启用状态，并解除预选
     - 颜色判定：如果不等于全局参数，才显示蓝色
     """
     single_clicked = pyqtSignal(int, int)
@@ -101,7 +101,7 @@ class PIDCellWidget(QFrame):
         self.row = row
         self.col = col
         self.is_enabled = False
-        self.is_custom_flag = False
+        self.is_custom = False
         self.is_selected = False
 
         self.setFrameShape(QFrame.StyledPanel)
@@ -120,6 +120,7 @@ class PIDCellWidget(QFrame):
             ed.setFont(font)
             ed.setMaximumWidth(40)
             ed.setAlignment(Qt.AlignCenter)
+            ed.installEventFilter(self)
             # 用户修改完毕后，进行比对校验
             ed.editingFinished.connect(self.on_edit_finished)
             
@@ -135,20 +136,21 @@ class PIDCellWidget(QFrame):
         
         self.update_color()
 
+    def eventFilter(self, watched, event):
+        if watched in [self.p_edit, self.i_edit, self.d_edit, self.s_edit] and event.type() == QEvent.MouseButtonPress:
+            main_win = self.window()
+            if hasattr(main_win, 'on_pid_cell_input_clicked'):
+                main_win.on_pid_cell_input_clicked(self.row, self.col)
+        return super().eventFilter(watched, event)
+
     def on_edit_finished(self):
-        """用户编辑完毕后，自动对比全局参数，如果不一致才亮蓝灯"""
+        """用户编辑完毕后，自动对比全局参数，并按当前预选范围批量同步。"""
         self.is_enabled = True # 用户手动改参数，默认意图就是开启
         main_win = self.window()
-        if hasattr(main_win, 'pid_p_value'):
-            # 只有当这四个值和全局完全一模一样时，才不是特殊状态
-            if (self.p_edit.text() == main_win.pid_p_value.text() and
-                self.i_edit.text() == main_win.pid_i_value.text() and
-                self.d_edit.text() == main_win.pid_d_value.text() and
-                self.s_edit.text() == main_win.pid_scale_value.text()):
-                self.is_custom_flag = False
-            else:
-                self.is_custom_flag = True
-                
+        if hasattr(main_win, 'update_pid_cell_custom_flag'):
+            main_win.update_pid_cell_custom_flag(self)
+        if hasattr(main_win, 'apply_pid_bulk_edit_from_cell'):
+            main_win.apply_pid_bulk_edit_from_cell(self.row, self.col)
         self.update_color()
 
     def set_enabled(self, state):
@@ -159,17 +161,20 @@ class PIDCellWidget(QFrame):
         self.is_selected = state
         self.update_color()
 
+    def set_pid_values(self, p_text, i_text, d_text, s_text):
+        for editor, value in [(self.p_edit, p_text), (self.i_edit, i_text), (self.d_edit, d_text), (self.s_edit, s_text)]:
+            editor.blockSignals(True)
+            editor.setText(value)
+            editor.blockSignals(False)
+
     def mousePressEvent(self, event):
         self.single_clicked.emit(self.row, self.col)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         self.is_enabled = not self.is_enabled
-        # 【修复 2】：双击意味着确认操作，立刻解除红色预选状态
-        self.is_selected = False 
         if hasattr(self.window(), 'clear_pid_selection'):
             self.window().clear_pid_selection()
-            
         self.update_color()
         super().mouseDoubleClickEvent(event)
 
@@ -182,7 +187,7 @@ class PIDCellWidget(QFrame):
             border = "1px solid #AAA"
             if not self.is_enabled:
                 bg_color = "#E0E0E0" # 灰色未启用
-            elif self.is_custom_flag:
+            elif self.is_custom:
                 bg_color = "#BBDEFB" # 蓝色独立设置
             else:
                 bg_color = "#C8E6C9" # 绿色已启用
@@ -1506,6 +1511,10 @@ class MainWindow(QMainWindow):
         pid_param_layout.addStretch()
         pid_main_layout.addLayout(pid_param_layout)
         
+        self.pid_selection_mode = None
+        self.pid_selected_row = None
+        self.pid_selected_col = None
+
         self.pid_table = QTableWidget()
         self.pid_table.setRowCount(20)
         self.pid_table.setColumnCount(16)
@@ -2052,26 +2061,23 @@ class MainWindow(QMainWindow):
 # PID交互
 # ================= PID 矩阵交互与智能对比逻辑 =================
 
+    def update_pid_cell_custom_flag(self, cell):
+        """判断单个 PID 单元是否使用了独立参数。"""
+        cell.is_custom = (cell.p_edit.text() != self.pid_p_value.text() or
+                          cell.i_edit.text() != self.pid_i_value.text() or
+                          cell.d_edit.text() != self.pid_d_value.text() or
+                          cell.s_edit.text() != self.pid_scale_value.text())
+
     def refresh_all_cells_color(self):
-        """核心修复3：全局智能对比！判断每个格子的参数是否与全局一样"""
-        gp = self.pid_p_value.text()
-        gi = self.pid_i_value.text()
-        gd = self.pid_d_value.text()
-        gs = self.pid_scale_value.text()
-        
+        """根据全局 PID 参数和启用状态刷新所有单元颜色。"""
         for r in range(20):
             for c in range(16):
                 cell = self.pid_cells[r][c]
-                # 对比四个参数，只要有一个不同，就是独立配置 (is_custom = True)
-                is_diff = (cell.p_edit.text() != gp or 
-                           cell.i_edit.text() != gi or 
-                           cell.d_edit.text() != gd or 
-                           cell.s_edit.text() != gs)
-                cell.is_custom = is_diff
+                self.update_pid_cell_custom_flag(cell)
                 cell.update_color()
 
     def sync_global_pid(self):
-        """当修改顶部全局参数时，把参数覆盖给所有【非蓝色】的跟随单元格"""
+        """当修改顶部全局参数时，把参数覆盖给所有【非蓝色】的跟随单元格。"""
         gp = self.pid_p_value.text()
         gi = self.pid_i_value.text()
         gd = self.pid_d_value.text()
@@ -2082,78 +2088,114 @@ class MainWindow(QMainWindow):
                 cell = self.pid_cells[r][c]
                 # 只有没有被独立设置的卡片，才会被全局修改覆盖
                 if not cell.is_custom:
-                    cell.p_edit.blockSignals(True)
-                    cell.i_edit.blockSignals(True)
-                    cell.d_edit.blockSignals(True)
-                    cell.s_edit.blockSignals(True)
-                    
-                    cell.p_edit.setText(gp)
-                    cell.i_edit.setText(gi)
-                    cell.d_edit.setText(gd)
-                    cell.s_edit.setText(gs)
-                    
-                    cell.p_edit.blockSignals(False)
-                    cell.i_edit.blockSignals(False)
-                    cell.d_edit.blockSignals(False)
-                    cell.s_edit.blockSignals(False)
+                    cell.set_pid_values(gp, gi, gd, gs)
                     
         # 覆盖完后，刷新一遍颜色
         self.refresh_all_cells_color()
 
+    def _set_pid_header_color(self, row=None, col=None, color="#FFCDD2"):
+        if row is not None:
+            self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor(color)))
+        if col is not None:
+            self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor(color)))
+
     def clear_pid_selection(self):
-        """清除所有 PID 卡片和表头的红色预选中状态"""
+        """清除所有 PID 卡片和表头的红色预选中状态。"""
+        self.pid_selection_mode = None
+        self.pid_selected_row = None
+        self.pid_selected_col = None
         for row in range(20):
             for col in range(16):
                 self.pid_cells[row][col].set_selected(False)
         for row in range(20):
-            self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor("#F0F0F0")))
+            self._set_pid_header_color(row=row, color="#F0F0F0")
         for col in range(16):
-            self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor("#F0F0F0")))
+            self._set_pid_header_color(col=col, color="#F0F0F0")
 
     def on_pid_cell_clicked(self, row, col):
-        """单击单元格：十字准星瞄准"""
+        """单击单元格：只预选当前单元格和对应行列号。"""
         self.clear_pid_selection()
+        self.pid_selection_mode = "cell"
+        self.pid_selected_row = row
+        self.pid_selected_col = col
         self.pid_cells[row][col].set_selected(True)
-        self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor("#FFCDD2")))
-        self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor("#FFCDD2")))
+        self._set_pid_header_color(row=row, col=col)
+
+    def on_pid_cell_input_clicked(self, row, col):
+        """点击输入框时，行/列预选范围内保持批量编辑语义。"""
+        if self.pid_selection_mode == "row" and self.pid_selected_row == row:
+            return
+        if self.pid_selection_mode == "col" and self.pid_selected_col == col:
+            return
+        self.on_pid_cell_clicked(row, col)
 
     def on_pid_cell_double_clicked(self, row, col):
-        """双击单元格：触发反转，并清除全局的红色瞄准线"""
+        """兼容旧信号：双击后清除全局的红色瞄准线。"""
         self.clear_pid_selection()
         self.refresh_all_cells_color()
 
     def on_row_header_clicked(self, row):
-        """单击行号：瞄准整行"""
+        """单击行号：预选整行，不改变启用状态。"""
         self.clear_pid_selection()
-        self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor("#FFCDD2")))
+        self.pid_selection_mode = "row"
+        self.pid_selected_row = row
+        self._set_pid_header_color(row=row)
         for col in range(16):
             self.pid_cells[row][col].set_selected(True)
 
     def on_col_header_clicked(self, col):
-        """单击列号：瞄准整列"""
+        """单击列号：预选整列，不改变启用状态。"""
         self.clear_pid_selection()
-        self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor("#FFCDD2")))
+        self.pid_selection_mode = "col"
+        self.pid_selected_col = col
+        self._set_pid_header_color(col=col)
         for row in range(20):
             self.pid_cells[row][col].set_selected(True)
 
+    def apply_pid_bulk_edit_from_cell(self, row, col):
+        """行/列预选时，把当前单元的整组 PID 参数同步到预选范围。"""
+        if self.pid_selection_mode not in ("row", "col"):
+            return
+        if self.pid_selection_mode == "row" and self.pid_selected_row != row:
+            return
+        if self.pid_selection_mode == "col" and self.pid_selected_col != col:
+            return
+
+        source = self.pid_cells[row][col]
+        values = (source.p_edit.text(), source.i_edit.text(), source.d_edit.text(), source.s_edit.text())
+        target_cells = []
+        if self.pid_selection_mode == "row":
+            target_cells = [self.pid_cells[row][target_col] for target_col in range(16)]
+        elif self.pid_selection_mode == "col":
+            target_cells = [self.pid_cells[target_row][col] for target_row in range(20)]
+
+        for cell in target_cells:
+            if cell is not source:
+                cell.set_pid_values(*values)
+            cell.is_enabled = True
+            self.update_pid_cell_custom_flag(cell)
+            cell.set_selected(True)
+
     def on_row_header_double_clicked(self, row):
-        """双击某个行号 (全开/全关)"""
-        # 【修复 2】：双击时立刻清空坐标红线，呈现真实的绿/灰色
-        self.clear_pid_selection() 
+        """双击某个行号：整行全开/全关，并恢复真实颜色。"""
+        self.clear_pid_selection()
         any_disabled = any(not self.pid_cells[row][c].is_enabled for c in range(16))
         for col in range(16):
             self.pid_cells[row][col].set_enabled(any_disabled)
+        self.refresh_all_cells_color()
 
     def on_col_header_double_clicked(self, col):
-        """双击某个列号 (全开/全关)"""
+        """双击某个列号：整列全开/全关，并恢复真实颜色。"""
         self.clear_pid_selection()
         any_disabled = any(not self.pid_cells[r][col].is_enabled for r in range(20))
         for row in range(20):
             self.pid_cells[row][col].set_enabled(any_disabled)
+        self.refresh_all_cells_color()
         
     def toggle_all_pid(self, state):
-        """总开关：一键开启/关闭所有，并刷新颜色"""
+        """总开关：一键开启/关闭所有，并刷新颜色。"""
         checked = (state == 2)
+        self.clear_pid_selection()
         for row in range(20):
             for col in range(16):
                 self.pid_cells[row][col].set_enabled(checked)
