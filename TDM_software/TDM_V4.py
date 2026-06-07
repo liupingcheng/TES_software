@@ -7,6 +7,7 @@ import sys
 import time
 import socket
 import struct
+import ipaddress
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QScrollArea, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
                              QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView, QHeaderView)
@@ -16,8 +17,8 @@ from PyQt5.QtGui import QFont, QBrush, QColor
 # ================= 安全交互控件=================
 # 1. 下拉框：只屏蔽滚轮误触
 class QComboBox(_QComboBox):
-    def wheelEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        e.ignore()
+    def wheelEvent(self, event):
+        event.ignore()
 
 class ColoredHeaderView(QHeaderView):
     """可单独设置每个表头 section 颜色的表头。"""
@@ -31,7 +32,7 @@ class ColoredHeaderView(QHeaderView):
         self._section_colors[section] = QColor(color)
         self.viewport().update()
 
-    def paintSection(self, painter, rect, logicalIndex):  # type: ignore[reportIncompatibleMethodOverride]
+    def paintSection(self, painter, rect, logicalIndex):
         if not rect.isValid():
             return
         painter.save()
@@ -51,29 +52,29 @@ class QLineEdit(_QLineEdit):
         self._original_text = ""
         self._is_editing = False
 
-    def focusInEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        super().focusInEvent(e)
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
         self._original_text = self.text() # 获得焦点时，记下修改前的文本
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
 
-    def keyPressEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        if e.key() in (Qt.Key_Return, Qt.Key_Enter):
-            super().keyPressEvent(e) # 先让原生控件处理回车
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            super().keyPressEvent(event) # 先让原生控件处理回车
             self._original_text = self.text() # 更新原始值为新文本
             self.clearFocus() # 丢掉焦点（这会触发下面的 focusOutEvent）
-        elif e.key() == Qt.Key_Escape:
+        elif event.key() == Qt.Key_Escape:
             self.setText(self._original_text) # 按ESC直接恢复原样
             self.clearFocus()
         else:
-            super().keyPressEvent(e)
+            super().keyPressEvent(event)
 
-    def focusOutEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
+    def focusOutEvent(self, event):
         if self._is_editing:
             self.setText(self._original_text) # 失去焦点时，强制恢复为记录的值
             self.setStyleSheet("") # 恢复白底
             self._is_editing = False
-        super().focusOutEvent(e)
+        super().focusOutEvent(event)
 
 # 3. 浮点数字框：防点错恢复机制
 class QDoubleSpinBox(_QDoubleSpinBox):
@@ -83,34 +84,34 @@ class QDoubleSpinBox(_QDoubleSpinBox):
         self._original_value = self.value()
         self._is_editing = False
 
-    def wheelEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        e.ignore()
+    def wheelEvent(self, event):
+        event.ignore()
 
-    def focusInEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        super().focusInEvent(e)
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
         self._original_value = self.value() # 记下修改前的值
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
 
-    def keyPressEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        if e.key() in (Qt.Key_Return, Qt.Key_Enter):
-            super().keyPressEvent(e) # 让控件提交新值
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            super().keyPressEvent(event) # 让控件提交新值
             self._original_value = self.value() # 覆盖记录
             self.clearFocus()
-        elif e.key() == Qt.Key_Escape:
+        elif event.key() == Qt.Key_Escape:
             self.setValue(self._original_value)
             self.clearFocus()
         else:
-            super().keyPressEvent(e)
+            super().keyPressEvent(event)
 
-    def focusOutEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
+    def focusOutEvent(self, event):
         if self._is_editing:
             # 如果是按回车触发的失去焦点，_original_value 是新值，反正就是必须回车确认才会更新 _original_value
             # 如果是鼠标点到别的地方，_original_value 是老值
             self.setValue(self._original_value) 
             self.setStyleSheet("")
             self._is_editing = False
-        super().focusOutEvent(e)
+        super().focusOutEvent(event)
 
 class PIDCellWidget(QFrame):
     """
@@ -161,12 +162,12 @@ class PIDCellWidget(QFrame):
         
         self.update_color()
 
-    def eventFilter(self, watched, e):  # type: ignore[reportIncompatibleMethodOverride]
-        if watched in [self.p_edit, self.i_edit, self.d_edit, self.s_edit] and e.type() == QEvent.MouseButtonPress:
+    def eventFilter(self, watched, event):
+        if watched in [self.p_edit, self.i_edit, self.d_edit, self.s_edit] and event.type() == QEvent.MouseButtonPress:
             main_win = self.window()
             if hasattr(main_win, 'on_pid_cell_input_clicked'):
                 main_win.on_pid_cell_input_clicked(self.row, self.col)
-        return super().eventFilter(watched, e)
+        return super().eventFilter(watched, event)
 
     def on_edit_finished(self):
         """用户编辑完毕后，自动对比全局参数，并按当前预选范围批量同步。"""
@@ -192,16 +193,16 @@ class PIDCellWidget(QFrame):
             editor.setText(value)
             editor.blockSignals(False)
 
-    def mousePressEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
+    def mousePressEvent(self, event):
         self.single_clicked.emit(self.row, self.col)
-        super().mousePressEvent(e)
+        super().mousePressEvent(event)
 
-    def mouseDoubleClickEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
+    def mouseDoubleClickEvent(self, event):
         self.is_enabled = not self.is_enabled
         if hasattr(self.window(), 'clear_pid_selection'):
             self.window().clear_pid_selection()
         self.update_color()
-        super().mouseDoubleClickEvent(e)
+        super().mouseDoubleClickEvent(event)
 
     def update_color(self):
         """颜色优先级：红色预选 > 灰色禁用 > 蓝色独立 > 绿色跟随"""
@@ -226,32 +227,32 @@ class QSpinBox(_QSpinBox):
         self._original_value = self.value()
         self._is_editing = False
 
-    def wheelEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        e.ignore()
+    def wheelEvent(self, event):
+        event.ignore()
 
-    def focusInEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        super().focusInEvent(e)
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
         self._original_value = self.value()
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
 
-    def keyPressEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
-        if e.key() in (Qt.Key_Return, Qt.Key_Enter):
-            super().keyPressEvent(e)
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            super().keyPressEvent(event)
             self._original_value = self.value()
             self.clearFocus()
-        elif e.key() == Qt.Key_Escape:
+        elif event.key() == Qt.Key_Escape:
             self.setValue(self._original_value)
             self.clearFocus()
         else:
-            super().keyPressEvent(e)
+            super().keyPressEvent(event)
 
-    def focusOutEvent(self, e):  # type: ignore[reportIncompatibleMethodOverride]
+    def focusOutEvent(self, event):
         if self._is_editing:
             self.setValue(self._original_value)
             self.setStyleSheet("")
             self._is_editing = False
-        super().focusOutEvent(e)
+        super().focusOutEvent(event)
 
 class BiasBoardWidget(QWidget):
     """独立的偏置源板卡控件"""
@@ -1065,7 +1066,7 @@ class MainWindow(QMainWindow):
             connection_layout.addWidget(QLabel(name), i, 0) 
             
             # second column: IP address input box
-            ip_edit = QLineEdit(default_ip) 
+            ip_edit = _QLineEdit(default_ip) 
             ip_edit.setMinimumWidth(150) # set minimum width for better appearance
             self.board_ip_edits[board_type] = ip_edit # store the input box in the dictionary for later use
             connection_layout.addWidget(ip_edit, i, 1)
@@ -1929,7 +1930,15 @@ class MainWindow(QMainWindow):
         
         # 状态 1：明确要求【连接】
         if current_text == "连接":
-            ip = self.board_ip_edits[board_type].text()
+            ip = self.board_ip_edits[board_type].text().strip()
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                msg = f"{board_type} 的 IP 地址格式无效: {ip}"
+                self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+                QMessageBox.warning(self, "连接失败", msg)
+                return
+
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 正在后台尝试连接 ({ip})...")
             
             self.board_status_labels[board_type].setText("连接中...")
@@ -1992,7 +2001,9 @@ class MainWindow(QMainWindow):
             # 失败,result 里面装的是错误原因的字符串
             self.board_status_labels[board_type].setText("未连接")
             self.board_status_labels[board_type].setStyleSheet("color: red; font-weight: bold;")
+            self.board_connection_btns[board_type].setText("连接")
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接失败: {result}")
+            QMessageBox.warning(self, "连接失败", f"{board_type} 连接失败:\n{result}")
             
     def on_test_send_clicked(self):
         """点击测试发送按钮"""
@@ -2241,4 +2252,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
