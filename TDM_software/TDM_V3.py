@@ -9,10 +9,9 @@ import socket
 import struct
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QScrollArea, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
-                             QMessageBox,QFrame)
-# pyrefly: ignore [missing-import]
+                             QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QBrush, QColor
 
 # ================= 安全交互控件=================
 # 1. 下拉框：只屏蔽滚轮误触
@@ -88,6 +87,107 @@ class QDoubleSpinBox(_QDoubleSpinBox):
             self._is_editing = False
         super().focusOutEvent(event)
 
+class PIDCellWidget(QFrame):
+    """
+    智能 PID 单元格卡片：
+    - 单击：发送预选中信号 (浅红色)
+    - 双击：立即切换状态，并解除预选
+    - 颜色判定：如果不等于全局参数，才显示蓝色
+    """
+    single_clicked = pyqtSignal(int, int)
+
+    def __init__(self, row, col, parent=None):
+        super().__init__(parent)
+        self.row = row
+        self.col = col
+        self.is_enabled = False
+        self.is_custom_flag = False
+        self.is_selected = False
+
+        self.setFrameShape(QFrame.StyledPanel)
+        
+        layout = QGridLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
+        
+        self.p_edit = QLineEdit("0x100")
+        self.i_edit = QLineEdit("0x1")
+        self.d_edit = QLineEdit("0x0")
+        self.s_edit = QLineEdit("0xD")
+        
+        font = QFont("Arial", 8)
+        for ed in [self.p_edit, self.i_edit, self.d_edit, self.s_edit]:
+            ed.setFont(font)
+            ed.setMaximumWidth(40)
+            ed.setAlignment(Qt.AlignCenter)
+            # 用户修改完毕后，进行比对校验
+            ed.editingFinished.connect(self.on_edit_finished)
+            
+        lbl_p = QLabel("P:"); lbl_p.setFont(font)
+        lbl_i = QLabel("I:"); lbl_i.setFont(font)
+        lbl_d = QLabel("D:"); lbl_d.setFont(font)
+        lbl_s = QLabel("S:"); lbl_s.setFont(font)
+        
+        layout.addWidget(lbl_p, 0, 0); layout.addWidget(self.p_edit, 0, 1)
+        layout.addWidget(lbl_i, 0, 2); layout.addWidget(self.i_edit, 0, 3)
+        layout.addWidget(lbl_d, 1, 0); layout.addWidget(self.d_edit, 1, 1)
+        layout.addWidget(lbl_s, 1, 2); layout.addWidget(self.s_edit, 1, 3)
+        
+        self.update_color()
+
+    def on_edit_finished(self):
+        """用户编辑完毕后，自动对比全局参数，如果不一致才亮蓝灯"""
+        self.is_enabled = True # 用户手动改参数，默认意图就是开启
+        main_win = self.window()
+        if hasattr(main_win, 'pid_p_value'):
+            # 只有当这四个值和全局完全一模一样时，才不是特殊状态
+            if (self.p_edit.text() == main_win.pid_p_value.text() and
+                self.i_edit.text() == main_win.pid_i_value.text() and
+                self.d_edit.text() == main_win.pid_d_value.text() and
+                self.s_edit.text() == main_win.pid_scale_value.text()):
+                self.is_custom_flag = False
+            else:
+                self.is_custom_flag = True
+                
+        self.update_color()
+
+    def set_enabled(self, state):
+        self.is_enabled = state
+        self.update_color()
+        
+    def set_selected(self, state):
+        self.is_selected = state
+        self.update_color()
+
+    def mousePressEvent(self, event):
+        self.single_clicked.emit(self.row, self.col)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        self.is_enabled = not self.is_enabled
+        # 【修复 2】：双击意味着确认操作，立刻解除红色预选状态
+        self.is_selected = False 
+        if hasattr(self.window(), 'clear_pid_selection'):
+            self.window().clear_pid_selection()
+            
+        self.update_color()
+        super().mouseDoubleClickEvent(event)
+
+    def update_color(self):
+        """颜色优先级：红色预选 > 灰色禁用 > 蓝色独立 > 绿色跟随"""
+        if self.is_selected:
+            bg_color = "#FFCDD2" # 浅红预选
+            border = "2px solid red"
+        else:
+            border = "1px solid #AAA"
+            if not self.is_enabled:
+                bg_color = "#E0E0E0" # 灰色未启用
+            elif self.is_custom_flag:
+                bg_color = "#BBDEFB" # 蓝色独立设置
+            else:
+                bg_color = "#C8E6C9" # 绿色已启用
+                
+        self.setStyleSheet(f"PIDCellWidget {{ background-color: {bg_color}; border-radius: 4px; border: {border}; }}")
 # 4. 整数数字框：防点错恢复机制
 class QSpinBox(_QSpinBox):
     def __init__(self, *args, **kwargs):
@@ -122,7 +222,6 @@ class QSpinBox(_QSpinBox):
             self.setStyleSheet("")
             self._is_editing = False
         super().focusOutEvent(event)
-# ==========================================================
 
 class BiasBoardWidget(QWidget):
     """独立的偏置源板卡控件"""
@@ -137,7 +236,7 @@ class BiasBoardWidget(QWidget):
         # ================= 1. 信号类型切换 =================
         ac_dc_group = QGroupBox("信号类型")
         ac_dc_layout = QHBoxLayout()
-        self.signal_type = _QComboBox()
+        self.signal_type = QComboBox()
         self.signal_type.addItems(["直流", "交流"])
         ac_dc_layout.addWidget(QLabel("信号类型:"))
         ac_dc_layout.addWidget(self.signal_type)
@@ -150,19 +249,19 @@ class BiasBoardWidget(QWidget):
         ac_layout = QGridLayout()
         
         ac_layout.addWidget(QLabel("波形类型:"), 0, 0)
-        self.waveform_type = _QComboBox()
+        self.waveform_type = QComboBox()
         self.waveform_type.addItems(["正弦波", "三角波", "方波"])
         ac_layout.addWidget(self.waveform_type, 0, 1)
         
         ac_layout.addWidget(QLabel("频率:"), 1, 0)
-        self.frequency = _QDoubleSpinBox()
+        self.frequency = QDoubleSpinBox()
         self.frequency.setRange(0.1, 10000)
         self.frequency.setValue(1000)
         self.frequency.setSuffix(" Hz")
         ac_layout.addWidget(self.frequency, 1, 1)
         
         ac_layout.addWidget(QLabel("幅值:"), 2, 0)
-        self.amplitude = _QDoubleSpinBox()
+        self.amplitude = QDoubleSpinBox()
         self.amplitude.setRange(0, 1000)
         self.amplitude.setValue(10)
         self.amplitude.setSuffix(" μA")
@@ -175,7 +274,7 @@ class BiasBoardWidget(QWidget):
         self.dc_params_group = QGroupBox("直流信号参数")
         dc_layout = QHBoxLayout()
         dc_layout.addWidget(QLabel("直流电流:"))
-        self.dc_value = _QDoubleSpinBox()
+        self.dc_value = QDoubleSpinBox()
         self.dc_value.setRange(-1000, 1000)
         self.dc_value.setValue(0)
         self.dc_value.setSuffix(" μA")
@@ -1230,7 +1329,7 @@ class MainWindow(QMainWindow):
         # 第一行：路径选择
         path_layout = QHBoxLayout()
         path_layout.addWidget(QLabel("存储路径:"))
-        self.storage_path = _QLineEdit()
+        self.storage_path = QLineEdit()
         self.storage_path.setPlaceholderText("请选择数据存储路径...")
         self.storage_path.setReadOnly(True)
         path_layout.addWidget(self.storage_path, stretch=1)
@@ -1242,19 +1341,19 @@ class MainWindow(QMainWindow):
         # 第二行：格式、前缀、自动保存间隔
         format_layout = QHBoxLayout()
         format_layout.addWidget(QLabel("格式:"))
-        self.storage_format = _QComboBox()
+        self.storage_format = QComboBox()
         self.storage_format.addItems(["二进制(.bin)", "数据(.dat)"])
         format_layout.addWidget(self.storage_format)
         
         format_layout.addSpacing(10)
         format_layout.addWidget(QLabel("前缀:"))
-        self.file_prefix = _QLineEdit("TDM_data")
+        self.file_prefix = QLineEdit("TDM_data")
         self.file_prefix.setMaximumWidth(100)
         format_layout.addWidget(self.file_prefix)
         
         format_layout.addSpacing(10)
         format_layout.addWidget(QLabel("分卷间隔:"))
-        self.save_interval = _QSpinBox()
+        self.save_interval = QSpinBox()
         self.save_interval.setRange(1, 86400) # 1秒 到 24小时
         self.save_interval.setValue(60)       # 默认 60 秒切一个文件
         self.save_interval.setSuffix(" 秒")
@@ -1290,6 +1389,84 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(top_h_layout)
         
         # ================= 下半部分：PID 参数控制区 (20行16列) =================
+        # pid_group = QGroupBox("PID参数控制 (20行 × 16列)")
+        # pid_main_layout = QVBoxLayout()
+        
+        # pid_param_layout = QHBoxLayout()
+        # self.pid_master_switch = QCheckBox("PID参数 总开关")
+        # self.pid_master_switch.setFont(QFont("Arial", 10, QFont.Bold))
+        # self.pid_master_switch.stateChanged.connect(self.toggle_all_pid)
+        # pid_param_layout.addWidget(self.pid_master_switch)
+        
+        # pid_param_layout.addSpacing(30)
+        
+        # pid_param_layout.addWidget(QLabel("P系数(HEX):"))
+        # self.pid_p_value = QLineEdit("0x100")
+        # self.pid_p_value.setMaximumWidth(80)
+        # pid_param_layout.addWidget(self.pid_p_value)
+        
+        # pid_param_layout.addWidget(QLabel("I系数(HEX):"))
+        # self.pid_i_value = QLineEdit("0x1")
+        # self.pid_i_value.setMaximumWidth(80)
+        # pid_param_layout.addWidget(self.pid_i_value)
+        
+        # pid_param_layout.addWidget(QLabel("D系数(HEX):"))
+        # self.pid_d_value = QLineEdit("0x0")
+        # self.pid_d_value.setMaximumWidth(80)
+        # pid_param_layout.addWidget(self.pid_d_value)
+        
+        # pid_param_layout.addWidget(QLabel("缩放因子(HEX):"))
+        # self.pid_scale_value = QLineEdit("0xD")
+        # self.pid_scale_value.setMaximumWidth(80)
+        # pid_param_layout.addWidget(self.pid_scale_value)
+        
+        # pid_param_layout.addStretch()
+        # pid_main_layout.addLayout(pid_param_layout)
+        
+        # self.pid_table = QTableWidget()
+        # self.pid_table.setRowCount(20)
+        # self.pid_table.setColumnCount(16)
+        
+        # row_headers = [f" {i+1} " for i in range(20)]
+        # col_headers = [f" {i+1} " for i in range(16)]
+        # self.pid_table.setVerticalHeaderLabels(row_headers)
+        # self.pid_table.setHorizontalHeaderLabels(col_headers)
+        
+        # self.pid_switches, self.pid_values = [], []
+        
+        # for row in range(20):
+        #     row_switches, row_values = [], []
+        #     for col in range(16):
+        #         cell_widget = QWidget()
+        #         cell_layout = QVBoxLayout()
+        #         cell_layout.setContentsMargins(5, 2, 5, 2)
+                
+        #         switch = QCheckBox()
+        #         row_switches.append(switch)
+        #         cell_layout.addWidget(switch, alignment=Qt.AlignCenter) # 开关居中
+                
+        #         value = QDoubleSpinBox()
+        #         value.setRange(-10, 10)
+        #         value.setDecimals(3)
+        #         row_values.append(value)
+        #         cell_layout.addWidget(value)
+                
+        #         cell_widget.setLayout(cell_layout)
+        #         self.pid_table.setCellWidget(row, col, cell_widget)
+            
+        #     self.pid_switches.append(row_switches)
+        #     self.pid_values.append(row_values)
+        
+        # self.pid_table.horizontalHeader().setDefaultSectionSize(70)
+        # self.pid_table.verticalHeader().setDefaultSectionSize(65)
+        
+        # pid_main_layout.addWidget(self.pid_table)
+        # pid_group.setLayout(pid_main_layout)
+        # # main_layout.addWidget(pid_group)
+        # main_layout.addWidget(pid_group, stretch=1) 
+        # widget.setLayout(main_layout)
+        # self.tabs.addTab(widget, "FPGA数据汇总")
+# ================= 下半部分：PID 参数控制区 (20行16列) =================
         pid_group = QGroupBox("PID参数控制 (20行 × 16列)")
         pid_main_layout = QVBoxLayout()
         
@@ -1301,24 +1478,29 @@ class MainWindow(QMainWindow):
         
         pid_param_layout.addSpacing(30)
         
-        pid_param_layout.addWidget(QLabel("P系数(HEX):"))
-        self.pid_p_value = _QLineEdit("0x100")
-        self.pid_p_value.setMaximumWidth(80)
+        # 顶部的全局 PID 输入框 (注意我给它们加上了 .editingFinished 的联动)
+        pid_param_layout.addWidget(QLabel("全局 P(HEX):"))
+        self.pid_p_value = QLineEdit("0x100")
+        self.pid_p_value.setMaximumWidth(60)
+        self.pid_p_value.editingFinished.connect(self.sync_global_pid)
         pid_param_layout.addWidget(self.pid_p_value)
         
-        pid_param_layout.addWidget(QLabel("I系数(HEX):"))
-        self.pid_i_value = _QLineEdit("0x1")
-        self.pid_i_value.setMaximumWidth(80)
+        pid_param_layout.addWidget(QLabel("全局 I:"))
+        self.pid_i_value = QLineEdit("0x1")
+        self.pid_i_value.setMaximumWidth(60)
+        self.pid_i_value.editingFinished.connect(self.sync_global_pid)
         pid_param_layout.addWidget(self.pid_i_value)
         
-        pid_param_layout.addWidget(QLabel("D系数(HEX):"))
-        self.pid_d_value = _QLineEdit("0x0")
-        self.pid_d_value.setMaximumWidth(80)
+        pid_param_layout.addWidget(QLabel("全局 D:"))
+        self.pid_d_value = QLineEdit("0x0")
+        self.pid_d_value.setMaximumWidth(60)
+        self.pid_d_value.editingFinished.connect(self.sync_global_pid)
         pid_param_layout.addWidget(self.pid_d_value)
         
-        pid_param_layout.addWidget(QLabel("缩放因子(HEX):"))
-        self.pid_scale_value = _QLineEdit("0xD")
-        self.pid_scale_value.setMaximumWidth(80)
+        pid_param_layout.addWidget(QLabel("全局 S:"))
+        self.pid_scale_value = QLineEdit("0xD")
+        self.pid_scale_value.setMaximumWidth(60)
+        self.pid_scale_value.editingFinished.connect(self.sync_global_pid)
         pid_param_layout.addWidget(self.pid_scale_value)
         
         pid_param_layout.addStretch()
@@ -1328,46 +1510,53 @@ class MainWindow(QMainWindow):
         self.pid_table.setRowCount(20)
         self.pid_table.setColumnCount(16)
         
-        row_headers = [f" {i+1} " for i in range(20)]
-        col_headers = [f" {i+1} " for i in range(16)]
-        self.pid_table.setVerticalHeaderLabels(row_headers)
-        self.pid_table.setHorizontalHeaderLabels(col_headers)
+        self.pid_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.pid_table.setFocusPolicy(Qt.NoFocus)
+        #表头颜色也可以改
+        self.pid_table.setStyleSheet("QHeaderView::section { border: 1px solid #CCC; }")
+        # 显式实例化表头对象，并赋上默认的浅灰色
+        for r in range(20):
+            item = QTableWidgetItem(f" {r+1} ")
+            item.setBackground(QBrush(QColor("#F0F0F0"))) # 默认浅灰
+            self.pid_table.setVerticalHeaderItem(r, item)
+            
+        for c in range(16):
+            item = QTableWidgetItem(f" {c+1} ")
+            item.setBackground(QBrush(QColor("#F0F0F0"))) # 默认浅灰
+            self.pid_table.setHorizontalHeaderItem(c, item)
+            
+                    # 绑定行列号（表头）的单击和双击事件
+        self.pid_table.horizontalHeader().sectionClicked.connect(self.on_col_header_clicked)
+        self.pid_table.horizontalHeader().sectionDoubleClicked.connect(self.on_col_header_double_clicked)
+        self.pid_table.verticalHeader().sectionClicked.connect(self.on_row_header_clicked)
+        self.pid_table.verticalHeader().sectionDoubleClicked.connect(self.on_row_header_double_clicked)
+        # row_headers = [f" {i+1} " for i in range(20)]
+        # col_headers = [f" {i+1} " for i in range(16)]
+        # self.pid_table.setVerticalHeaderLabels(row_headers)
+        # self.pid_table.setHorizontalHeaderLabels(col_headers)
         
-        self.pid_switches, self.pid_values = [], []
+        # 原来装 checkbox 和 value 的两个列表，现在只需要一个存卡片的列表即可
+        self.pid_cells = []
         
         for row in range(20):
-            row_switches, row_values = [], []
+            row_cells = []
             for col in range(16):
-                cell_widget = QWidget()
-                cell_layout = QVBoxLayout()
-                cell_layout.setContentsMargins(5, 2, 5, 2)
-                
-                switch = QCheckBox()
-                row_switches.append(switch)
-                cell_layout.addWidget(switch, alignment=Qt.AlignCenter) # 开关居中
-                
-                value = _QDoubleSpinBox()
-                value.setRange(-10, 10)
-                value.setDecimals(3)
-                row_values.append(value)
-                cell_layout.addWidget(value)
-                
-                cell_widget.setLayout(cell_layout)
+                cell_widget = PIDCellWidget(row, col)
+                # 将卡片的“被点击”信号，连到主窗口的处理函数上
+                cell_widget.single_clicked.connect(self.on_pid_cell_clicked)
                 self.pid_table.setCellWidget(row, col, cell_widget)
+                row_cells.append(cell_widget)
             
-            self.pid_switches.append(row_switches)
-            self.pid_values.append(row_values)
-        
-        self.pid_table.horizontalHeader().setDefaultSectionSize(70)
-        self.pid_table.verticalHeader().setDefaultSectionSize(65)
-        
+            self.pid_cells.append(row_cells)
+            
+        self.pid_table.horizontalHeader().setDefaultSectionSize(120)
+        self.pid_table.verticalHeader().setDefaultSectionSize(75)
         pid_main_layout.addWidget(self.pid_table)
         pid_group.setLayout(pid_main_layout)
-        # main_layout.addWidget(pid_group)
-        main_layout.addWidget(pid_group, stretch=1) 
+        main_layout.addWidget(pid_group, stretch=1)
+        
         widget.setLayout(main_layout)
         self.tabs.addTab(widget, "FPGA数据汇总")
-
     def on_data_read_changed(self, state):
         if state == 2:
             self.sys_status_labels["数据读出"].setText("开")
@@ -1399,13 +1588,6 @@ class MainWindow(QMainWindow):
             self.sys_status_labels["选通控制"].setText("关")
             self.sys_status_labels["选通控制"].setStyleSheet("color: red; font-weight: bold; font-size: 13px;")
             self.connection_log.append("选通控制: [ OFF ]")
-            
-    def toggle_all_pid(self, state):
-        checked = (state == 2)
-        # 二维数组的遍历
-        for row in range(20):
-            for col in range(16):
-                self.pid_switches[row][col].setChecked(checked)
 
     def setup_fb_dac_control(self, parent_layout):
         """FB DAC控制 (紧凑排版 + 呼吸空间)"""
@@ -1507,7 +1689,7 @@ class MainWindow(QMainWindow):
             self.adc_switches.append(s1)
             layout.addWidget(s1, row, 1)
             
-            v1 = _QDoubleSpinBox()
+            v1 = QDoubleSpinBox()
             v1.setRange(-10, 10)
             v1.setSuffix(" V")
             v1.setDecimals(3)
@@ -1518,7 +1700,7 @@ class MainWindow(QMainWindow):
             self.adc_offset_switches.append(s2)
             layout.addWidget(s2, row, 4)
             
-            v2 = _QDoubleSpinBox()
+            v2 = QDoubleSpinBox()
             v2.setRange(-10, 10)
             v2.setSuffix(" V")
             v2.setDecimals(3)
@@ -1594,37 +1776,37 @@ class MainWindow(QMainWindow):
         param_layout.setHorizontalSpacing(20)
         
         param_layout.addWidget(QLabel("波形类型:"), 0, 0)
-        self.gate_waveform = _QComboBox()
+        self.gate_waveform = QComboBox()
         self.gate_waveform.addItems(["某一行DC", "三角波", "方波", "正弦波"])
         param_layout.addWidget(self.gate_waveform, 0, 1)
         
         param_layout.addWidget(QLabel("频率:"), 0, 2)
-        self.gate_frequency = _QDoubleSpinBox()
+        self.gate_frequency = QDoubleSpinBox()
         self.gate_frequency.setRange(0.1, 100000)
         self.gate_frequency.setValue(1000)
         self.gate_frequency.setSuffix(" Hz")
         param_layout.addWidget(self.gate_frequency, 0, 3)
         
         param_layout.addWidget(QLabel("幅值(HEX):"), 1, 0)
-        self.gate_amplitude = _QLineEdit("0xFFFF")
+        self.gate_amplitude = QLineEdit("0xFFFF")
         param_layout.addWidget(self.gate_amplitude, 1, 1)
         
         param_layout.addWidget(QLabel("选通开始延迟:"), 1, 2)
-        self.gate_start_delay = _QSpinBox()
+        self.gate_start_delay = QSpinBox()
         self.gate_start_delay.setRange(0, 10000)
         self.gate_start_delay.setValue(0)
         self.gate_start_delay.setSuffix(" ns")
         param_layout.addWidget(self.gate_start_delay, 1, 3)
         
         param_layout.addWidget(QLabel("选通开始稳态:"), 2, 0)
-        self.gate_start_steady = _QSpinBox()
+        self.gate_start_steady = QSpinBox()
         self.gate_start_steady.setRange(0, 10000)
         self.gate_start_steady.setValue(100)
         self.gate_start_steady.setSuffix(" ns")
         param_layout.addWidget(self.gate_start_steady, 2, 1)
         
         param_layout.addWidget(QLabel("选通结束稳态:"), 2, 2)
-        self.gate_end_steady = _QSpinBox()
+        self.gate_end_steady = QSpinBox()
         self.gate_end_steady.setRange(0, 10000)
         self.gate_end_steady.setValue(100)
         self.gate_end_steady.setSuffix(" ns")
@@ -1672,7 +1854,7 @@ class MainWindow(QMainWindow):
             self.gate_dac_switches.append(s1)
             dac_layout.addWidget(s1, row, 1)
             
-            v1 = _QDoubleSpinBox()
+            v1 = QDoubleSpinBox()
             v1.setRange(-10, 10)
             v1.setSuffix(" V")
             v1.setDecimals(3)
@@ -1683,7 +1865,7 @@ class MainWindow(QMainWindow):
             self.gate_dac_offset_switches.append(s2)
             dac_layout.addWidget(s2, row, 4)
             
-            v2 = _QDoubleSpinBox()
+            v2 = QDoubleSpinBox()
             v2.setRange(-10, 10)
             v2.setSuffix(" V")
             v2.setDecimals(3)
@@ -1866,9 +2048,116 @@ class MainWindow(QMainWindow):
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 已向 {board_type} 发送写入指令 ({len(packets)} 条)")           
         except Exception as e:
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 写入失败: {str(e)}")
+ 
+# PID交互
+# ================= PID 矩阵交互与智能对比逻辑 =================
 
-            
-            
+    def refresh_all_cells_color(self):
+        """核心修复3：全局智能对比！判断每个格子的参数是否与全局一样"""
+        gp = self.pid_p_value.text()
+        gi = self.pid_i_value.text()
+        gd = self.pid_d_value.text()
+        gs = self.pid_scale_value.text()
+        
+        for r in range(20):
+            for c in range(16):
+                cell = self.pid_cells[r][c]
+                # 对比四个参数，只要有一个不同，就是独立配置 (is_custom = True)
+                is_diff = (cell.p_edit.text() != gp or 
+                           cell.i_edit.text() != gi or 
+                           cell.d_edit.text() != gd or 
+                           cell.s_edit.text() != gs)
+                cell.is_custom = is_diff
+                cell.update_color()
+
+    def sync_global_pid(self):
+        """当修改顶部全局参数时，把参数覆盖给所有【非蓝色】的跟随单元格"""
+        gp = self.pid_p_value.text()
+        gi = self.pid_i_value.text()
+        gd = self.pid_d_value.text()
+        gs = self.pid_scale_value.text()
+        
+        for r in range(20):
+            for c in range(16):
+                cell = self.pid_cells[r][c]
+                # 只有没有被独立设置的卡片，才会被全局修改覆盖
+                if not cell.is_custom:
+                    cell.p_edit.blockSignals(True)
+                    cell.i_edit.blockSignals(True)
+                    cell.d_edit.blockSignals(True)
+                    cell.s_edit.blockSignals(True)
+                    
+                    cell.p_edit.setText(gp)
+                    cell.i_edit.setText(gi)
+                    cell.d_edit.setText(gd)
+                    cell.s_edit.setText(gs)
+                    
+                    cell.p_edit.blockSignals(False)
+                    cell.i_edit.blockSignals(False)
+                    cell.d_edit.blockSignals(False)
+                    cell.s_edit.blockSignals(False)
+                    
+        # 覆盖完后，刷新一遍颜色
+        self.refresh_all_cells_color()
+
+    def clear_pid_selection(self):
+        """清除所有 PID 卡片和表头的红色预选中状态"""
+        for row in range(20):
+            for col in range(16):
+                self.pid_cells[row][col].set_selected(False)
+        for row in range(20):
+            self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor("#F0F0F0")))
+        for col in range(16):
+            self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor("#F0F0F0")))
+
+    def on_pid_cell_clicked(self, row, col):
+        """单击单元格：十字准星瞄准"""
+        self.clear_pid_selection()
+        self.pid_cells[row][col].set_selected(True)
+        self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor("#FFCDD2")))
+        self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor("#FFCDD2")))
+
+    def on_pid_cell_double_clicked(self, row, col):
+        """双击单元格：触发反转，并清除全局的红色瞄准线"""
+        self.clear_pid_selection()
+        self.refresh_all_cells_color()
+
+    def on_row_header_clicked(self, row):
+        """单击行号：瞄准整行"""
+        self.clear_pid_selection()
+        self.pid_table.verticalHeaderItem(row).setBackground(QBrush(QColor("#FFCDD2")))
+        for col in range(16):
+            self.pid_cells[row][col].set_selected(True)
+
+    def on_col_header_clicked(self, col):
+        """单击列号：瞄准整列"""
+        self.clear_pid_selection()
+        self.pid_table.horizontalHeaderItem(col).setBackground(QBrush(QColor("#FFCDD2")))
+        for row in range(20):
+            self.pid_cells[row][col].set_selected(True)
+
+    def on_row_header_double_clicked(self, row):
+        """双击某个行号 (全开/全关)"""
+        # 【修复 2】：双击时立刻清空坐标红线，呈现真实的绿/灰色
+        self.clear_pid_selection() 
+        any_disabled = any(not self.pid_cells[row][c].is_enabled for c in range(16))
+        for col in range(16):
+            self.pid_cells[row][col].set_enabled(any_disabled)
+
+    def on_col_header_double_clicked(self, col):
+        """双击某个列号 (全开/全关)"""
+        self.clear_pid_selection()
+        any_disabled = any(not self.pid_cells[r][col].is_enabled for r in range(20))
+        for row in range(20):
+            self.pid_cells[row][col].set_enabled(any_disabled)
+        
+    def toggle_all_pid(self, state):
+        """总开关：一键开启/关闭所有，并刷新颜色"""
+        checked = (state == 2)
+        for row in range(20):
+            for col in range(16):
+                self.pid_cells[row][col].set_enabled(checked)
+        self.refresh_all_cells_color()          
         
 
 
