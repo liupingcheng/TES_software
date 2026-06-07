@@ -1905,7 +1905,7 @@ class MainWindow(QMainWindow):
         if directory:
             self.storage_path.setText(directory)
             # 【修改】：打入专属数据日志
-            self.data_log.append(f"[{time.strftime('%H:%M:%S')}] 存储路径已更新: {directory}")
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 存储路径已更新: {directory}")
 
                 
     def on_write_bias_clicked(self):
