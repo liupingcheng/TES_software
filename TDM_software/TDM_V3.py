@@ -305,12 +305,6 @@ class BiasBoardWidget(QWidget):
         checked = (state == 2)
         for switch in self.square_switches:
             switch.setChecked(checked)
-        
-    def toggle_all_tes(self, state):
-        checked = (state == 2)  # Checked 的值是 2
-        #根据总开关的状态切换所有TES开关的状态
-        for switch in self.tes_switches:
-            switch.setChecked(checked)
     
         # ========================== 板卡 2 ==========================
     def setup_board2_channels(self):
@@ -777,10 +771,16 @@ class TDMProtocol:
     #PARAM_ID映射
     PARAM_ENABLE   = 0x01  # 通道开关 (0/1)
     PARAM_TES_V    = 0x02  # TES偏置电压
-    PARAM_SIG_TYPE = 0x14  # 信号类型 (0=直流, 1=交流)
+    PARAM_SA_IB    = 0x03  # SQUID 偏置电流 (μA)
+    PARAM_SA_PHIX  = 0x04  # SQUID 磁通偏置 (μA)
+    PARAM_VB       = 0x05  # VB 温度偏压
+    PARAM_IS_I     = 0x06  # IS 偏置电流 (μA)
+    PARAM_IS_PHIB  = 0x07  # IS 磁通偏置 (μA)
     PARAM_AC_FREQ  = 0x10  # 交流频率
     PARAM_AC_AMP   = 0x11  # 交流幅值
+    PARAM_WAVEFORM = 0x12  # 波形类型 (0=正弦 1=方波 2=三角)
     PARAM_DC_VALUE = 0x13  # 直流幅值
+    PARAM_SIG_TYPE = 0x14  # 信号类型 (0=直流, 1=交流)
     
     #打包
     @staticmethod
@@ -1585,72 +1585,9 @@ class MainWindow(QMainWindow):
     #     group.setLayout(layout)
     #     parent_layout.addWidget(group)
 
-    def setup_fb_dac_control(self, parent_layout):
-        """FB DAC控制 (极致紧凑 + 竖线隔离 + 居左防拉伸)"""
-        group = QGroupBox("FB DAC控制 (16列)")
-        layout = QGridLayout()
-        layout.setHorizontalSpacing(15)
-        
-        self.fb_dac_master_switch = QCheckBox("DAC 总开关")
-        self.fb_dac_master_switch.setFont(QFont("Arial", 9, QFont.Bold))
-        self.fb_dac_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.fb_dac_switches])
-        layout.addWidget(self.fb_dac_master_switch, 0, 1, 1, 2)
-        
-        self.fb_dac_offset_master_switch = QCheckBox("offset 总开关")
-        self.fb_dac_offset_master_switch.setFont(QFont("Arial", 9, QFont.Bold))
-        self.fb_dac_offset_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.fb_dac_offset_switches])
-        layout.addWidget(self.fb_dac_offset_master_switch, 0, 4, 1, 2)
-        
-        layout.addWidget(QLabel("列"), 1, 0)
-        layout.addWidget(QLabel("DAC 开关"), 1, 1)
-        layout.addWidget(QLabel("DAC 输出值"), 1, 2)
-        layout.addWidget(QLabel("offset 开关"), 1, 4)
-        layout.addWidget(QLabel("offset 值"), 1, 5)
-        
-        vline = QFrame()
-        vline.setFrameShape(QFrame.VLine)
-        vline.setStyleSheet("color: #CCCCCC;")
-        layout.addWidget(vline, 1, 3, 17, 1)
-        
-        self.fb_dac_switches, self.fb_dac_values = [], []
-        self.fb_dac_offset_switches, self.fb_dac_offset_values = [], []
-        
-        for i in range(16):
-            row = i + 2
-            layout.addWidget(QLabel(f" {i+1} "), row, 0)
-            
-            s1 = QCheckBox()
-            self.fb_dac_switches.append(s1)
-            layout.addWidget(s1, row, 1)
-            
-            v1 = _QDoubleSpinBox()
-            v1.setRange(-10, 10)
-            v1.setSuffix(" V")
-            v1.setDecimals(3)
-            self.fb_dac_values.append(v1)
-            layout.addWidget(v1, row, 2)
-            
-            s2 = QCheckBox()
-            self.fb_dac_offset_switches.append(s2)
-            layout.addWidget(s2, row, 4)
-            
-            v2 = _QDoubleSpinBox()
-            v2.setRange(-10, 10)
-            v2.setSuffix(" V")
-            v2.setDecimals(3)
-            self.fb_dac_offset_values.append(v2)
-            layout.addWidget(v2, row, 5)
-            
-        layout.setColumnStretch(6, 1)
-        group.setLayout(layout)
-        
-        wrapper = QHBoxLayout()
-        wrapper.addWidget(group)
-        wrapper.addStretch()
-        parent_layout.addLayout(wrapper)
     
     def setup_gate_dac_control(self, parent_layout):
-        """选通DAC控制 (20行矩阵，极致紧凑 + 竖线隔离 + 居左防拉伸)"""
+        """选通DAC控制 (20行矩阵, 极致紧凑 + 竖线隔离 + 居左防拉伸)"""
         # --- 1. 顶部的参数设置区 ---
         param_group = QGroupBox("20行选通全局参数设定")
         param_layout = QGridLayout()
