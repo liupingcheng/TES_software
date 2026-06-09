@@ -40,10 +40,10 @@ def parse_packet(packet_bytes):
     cmd_name = CMD_NAMES.get(cmd, f"UNKNOWN({hex(cmd)})")
     
     details = f"Data={data} (0x{data:05X})"
-    if cmd == 0x0: # CTRL / Type
+    if cmd == 0x0: # CTRL / 类型
         wtype = WAVE_TYPES.get(data, "Unknown")
         details = f"Waveform={wtype} ({data})"
-    elif cmd == 0x5: # EDIT IDX
+    elif cmd == 0x5: # 编辑索引 (Channel Select)
         details = f"Channel={data}"
     
     return f"[{hex_formatted}] Chip={chip_id} | Cmd={cmd_name.ljust(25)} | {details}"
@@ -60,14 +60,14 @@ def handle_client(conn, addr, server_ip):
                 
             print(f"\n[{server_ip}] Received {len(data)} bytes:")
             
-            # Packets are 4 bytes each
+            # 数据包固定为4字节
             for i in range(0, len(data), 4):
                 chunk = data[i:i+4]
                 if len(chunk) == 4:
                     parsed = parse_packet(chunk)
                     print(f"  {parsed}")
                     
-                    # Try to reconstruct frequency if H and L are sent
+                    # 如果接收到 H 和 L 频率字节，尝试重组出真实频率值
                     val = struct.unpack('>I', chunk)[0]
                     cmd = (val >> 20) & 0xF
                     val_data = val & 0xFFFFF

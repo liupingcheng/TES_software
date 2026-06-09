@@ -1,0 +1,418 @@
+1: #This is the the new version of the TDM software. PyQt5 is used for the GUI.
+2: #The TDM software is used to control the TDM hardware. It will be used to control the TDM hardware and to collect data from the TDM hardware.
+3: #written by: Pingcheng Liu, 2026-6-9
+4: #V6 整合子豪的bias界面连接控制逻辑
+21: # ================= 安全交互控件=================
+22: # 1. 下拉框：只屏蔽滚轮误触
+52: # 2. 文本框：防点错恢复机制
+83: # 3. 浮点数字框：防点错恢复机制
+113: # 如果是按回车触发的失去焦点，_original_value 是新值，反正就是必须回车确认才会更新 _original_value
+114: # 如果是鼠标点到别的地方，_original_value 是老值
+154: # 用户修改完毕后，进行比对校验
+226: # 4. 整数数字框：防点错恢复机制
+271: # ================= 1. 信号类型切换 =================
+282: # ================= 2. 交流参数设置 =================
+308: # ================= 3. 直流参数设置 =================
+321: # 必须先将上述基础组件设置为整个窗口的 Layout
+324: # ================= 4. 根据板卡ID动态加载底部矩阵 =================
+332: # 加上弹性空间，把上面的组件全都往上顶
+335: # ================= 5. 【极其关键】绑定事件并强制触发一次 =================
+337: # 这一句必须在所有 UI 都构建完毕之后执行，强制根据当前的文字（"直流"）进行一波显示/隐藏！
+346: # 如果是板卡1，且方波组已经成功创建，则显示它
+350: # 直流模式下：隐藏交流参数，显示直流参数
+354: # 如果是板卡1，隐藏方波组
+360: # ================= 1. TES 信号控制区 =================
+386: # ================= 2. 独立方波信号控制区 =================
+390: # 顶部方波参数
+405: # 方波总开关
+429: # 初始时根据下拉框状态决定是否显示
+443: # ========================== 板卡 2 ==========================
+448: # ================= 左侧模块: SA Ib & SA phix =================
+461: # 注意：因为中间插了分割线，所以 phix 的位置往后挪了一列，到了第 4 列
+464: # 表头 (注意索引 3 留空给分割线)
+468: # 索引 3 是空的，用来放竖线
+472: # 【画一条贯穿上下的竖线作为视觉隔离】
+477: # 把它放在第 1 行到第 17 行的第 3 列 (跨越17行，占用1列)
+487: # --- Ib 部分 ---
+498: # --- phix 部分 ---
+509: # 【关键招式】：在最右侧（第 6 列）加一个弹簧，把所有控件狠狠往左挤！
+516: # ================= 右侧模块: Vb控制 =================
+545: # 【关键招式】：在最右侧（第 3 列）加弹簧，把 Vb 也紧紧往左挤！
+553: # def setup_board2_channels(self):
+554: #     """设置第二块板卡的通道控制 (16行纵向排列)"""
+555: #     group1 = QGroupBox("SA Ib & SA phix控制 (16列)")
+556: #     layout1 = QGridLayout()
+558: #     # 总开关
+559: #     self.sa_ib_master_switch = QCheckBox("SA Ib 总开关")
+560: #     self.sa_ib_master_switch.setFont(QFont("Arial", 9, QFont.Bold))
+561: #     self.sa_ib_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.sa_ib_switches])
+562: #     layout1.addWidget(self.sa_ib_master_switch, 0, 1, 1, 2)
+564: #     self.sa_phix_master_switch = QCheckBox("SA phix 总开关")
+565: #     self.sa_phix_master_switch.setFont(QFont("Arial", 9, QFont.Bold))
+566: #     self.sa_phix_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.sa_phix_switches])
+567: #     layout1.addWidget(self.sa_phix_master_switch, 0, 3, 1, 2)
+569: #     # 表头
+570: #     headers = ["列", "SA Ib开关", "SA Ib输出值", "SA phix开关", "SA phix输出值"]
+571: #     for col, text in enumerate(headers):
+572: #         layout1.addWidget(QLabel(text), 1, col)
+574: #     self.sa_ib_switches, self.sa_ib_values = [], []
+575: #     self.sa_phix_switches, self.sa_phix_values = [], []
+577: #     # 这里用的是纵向排列 (16行)
+578: #     for i in range(16):
+579: #         row = i + 2
+580: #         layout1.addWidget(QLabel(f"列{i+1}"), row, 0)
+582: #         # SA Ib
+583: #         ib_switch = QCheckBox()
+584: #         self.sa_ib_switches.append(ib_switch)
+585: #         layout1.addWidget(ib_switch, row, 1)
+587: #         ib_value = QDoubleSpinBox()
+588: #         ib_value.setRange(-1000, 1000)
+589: #         ib_value.setSuffix(" uA")
+590: #         self.sa_ib_values.append(ib_value)
+591: #         layout1.addWidget(ib_value, row, 2)
+593: #         # SA phix
+594: #         phix_switch = QCheckBox()
+595: #         self.sa_phix_switches.append(phix_switch)
+596: #         layout1.addWidget(phix_switch, row, 3)
+598: #         phix_value = QDoubleSpinBox()
+599: #         phix_value.setRange(-1000, 1000)
+600: #         phix_value.setSuffix(" uA")
+601: #         self.sa_phix_values.append(phix_value)
+602: #         layout1.addWidget(phix_value, row, 4)
+604: #     group1.setLayout(layout1)
+605: #     self.layout().addWidget(group1)
+607: #     # ----- Vb控制 -----
+608: #     group2 = QGroupBox("Vb控制 (16列)")
+609: #     layout2 = QGridLayout()
+611: #     self.vb_master_switch = QCheckBox("Vb 总开关")
+612: #     self.vb_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.vb_switches])
+613: #     layout2.addWidget(self.vb_master_switch, 0, 0, 1, 3)
+615: #     layout2.addWidget(QLabel("列"), 1, 0)
+616: #     layout2.addWidget(QLabel("开关"), 1, 1)
+617: #     layout2.addWidget(QLabel("输出值"), 1, 2)
+619: #     self.vb_switches, self.vb_values = [], []
+620: #     for i in range(16):
+621: #         row = i + 2
+622: #         layout2.addWidget(QLabel(f"列{i+1}"), row, 0)
+624: #         switch = QCheckBox()
+625: #         self.vb_switches.append(switch)
+626: #         layout2.addWidget(switch, row, 1)
+628: #         value = QDoubleSpinBox()
+629: #         value.setRange(-10, 10)
+630: #         value.setSuffix(" V")
+631: #         self.vb_values.append(value)
+632: #         layout2.addWidget(value, row, 2)
+634: #     group2.setLayout(layout2)
+635: #     self.layout().addWidget(group2)
+638: # ========================== 板卡 3 ==========================
+645: # --- 总开关 ---
+656: # --- 表头 ---
+660: # 第 3 列留空
+664: # --- 画一根纵贯南北的灰色分割线 ---
+674: # --- 16 路通道循环 ---
+679: # IS I 部分
+690: # IS phib 部分
+701: # 【关键招式】：在最右侧加一个隐形弹簧，把整个矩阵往左压紧！
+704: # 为了让它不过于铺满整个屏幕，我们在右侧再加一个空的水平弹簧外壳
+711: # def setup_board3_channels(self):
+712: #     """设置第三块板卡的通道控制"""
+713: #     group = QGroupBox("IS I & IS phib控制 (16列)")
+714: #     layout = QGridLayout()
+716: #     # 总开关
+717: #     self.is_i_master_switch = QCheckBox("IS I 总开关")
+718: #     self.is_i_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.is_i_switches])
+719: #     layout.addWidget(self.is_i_master_switch, 0, 1, 1, 2)
+721: #     self.is_phib_master_switch = QCheckBox("IS phib 总开关")
+722: #     self.is_phib_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.is_phib_switches])
+723: #     layout.addWidget(self.is_phib_master_switch, 0, 3, 1, 2)
+725: #     headers = ["列", "IS I开关", "IS I输出值", "IS phib开关", "IS phib输出值"]
+726: #     for col, text in enumerate(headers):
+727: #         layout.addWidget(QLabel(text), 1, col)
+729: #     self.is_i_switches, self.is_i_values = [], []
+730: #     self.is_phib_switches, self.is_phib_values = [], []
+732: #     for i in range(16):
+733: #         row = i + 2
+734: #         layout.addWidget(QLabel(f"列{i+1}"), row, 0)
+736: #         i_switch = QCheckBox()
+737: #         self.is_i_switches.append(i_switch)
+738: #         layout.addWidget(i_switch, row, 1)
+740: #         i_value = QDoubleSpinBox()
+741: #         i_value.setRange(-1000, 1000)
+742: #         i_value.setSuffix(" uA")
+743: #         self.is_i_values.append(i_value)
+744: #         layout.addWidget(i_value, row, 2)
+746: #         phib_switch = QCheckBox()
+747: #         self.is_phib_switches.append(phib_switch)
+748: #         layout.addWidget(phib_switch, row, 3)
+750: #         phib_value = QDoubleSpinBox()
+751: #         phib_value.setRange(-1000, 1000)
+752: #         phib_value.setSuffix(" uA")
+753: #         self.is_phib_values.append(phib_value)
+754: #         layout.addWidget(phib_value, row, 4)
+756: #     group.setLayout(layout)
+757: #     self.layout().addWidget(group)
+766: #交流直流设置
+768: # 提取波形类型：0=正弦波, 1=三角波, 2=方波 (刚好对应下拉框的 Index)
+784: # 各板卡打包
+786: # --- 偏置源板卡 1 (TES: 16列) ---
+794: # --- 偏置源板卡 2 (SA Ib/phix, Vb: 16列) ---
+796: # 1. SA Ib
+802: # 2. SA phix
+808: # 3. Vb
+815: # --- 偏置源板卡 3 (IS I/phib: 16列) ---
+817: # 1. IS I
+823: # 2. IS phib
+836: # 【新增：网络连接管理器】
+852: # ================= 1. 上半部分：选项卡控件 =================
+856: # ================= 2. 下半部分：底座 (左日志 + 右状态) =================
+859: # --- 左侧：全局系统日志 ---
+871: # --- 右侧：系统核心状态面板 ---
+876: # 定义初始状态，并准备一个字典存放标签对象的引用，方便以后动态修改
+889: # 标题标签
+894: # 值标签 (存入字典)
+905: # ================= 3. 初始化选项卡 =================
+929: #准备空字典来存储输入框
+939: # 循环生成每一行的控件
+941: # first column: board name label (used as status badge)
+948: # second column: IP address input box
+954: # third column: Port input box
+961: # fourth column: Local IP input box
+968: # fifth column: connection button
+972: # 信号与槽连接
+977: # sixth column: probe button (shifted from 8th)
+986: #批量操作的按钮
+991: #绑定点击事件到函数
+999: #绑定点击事件到断开按钮
+1014: # ================= 1. 创建子标签页控件 =================
+1037: # ================= 2. 将三块板卡加入子标签页 =================
+1047: # 实例化新的板卡界面
+1050: # Connect signals to sync with main window
+1057: # Reverse sync: when main tab changes, update board_widget
+1072: # ================= 3. 底部公共操作按钮 =================
+1073: # 原有的读写保存按钮对于 TDM bias 可能不再需要，因为 TDM bias 界面每个 channel 有自己的 send 按钮。
+1074: # 如果需要保留，可以在这里添加。目前暂时隐藏或移除，以完全采用 TDM bias 的操作逻辑。
+1075: # button_layout = QHBoxLayout()
+1076: # self.read_bias_btn = QPushButton("读取参数")
+1077: # self.write_bias_btn = QPushButton("写入参数")
+1078: # self.write_bias_btn.clicked.connect(self.on_write_bias_clicked)
+1079: # self.save_bias_btn = QPushButton("保存配置")
+1080: # button_layout.addWidget(self.read_bias_btn)
+1081: # button_layout.addWidget(self.write_bias_btn)
+1082: # button_layout.addWidget(self.save_bias_btn)
+1083: # button_layout.addStretch()
+1084: # layout.addLayout(button_layout)
+1089: # def setup_bias_control_tab(self):
+1090: #     widget = QWidget()
+1091: #     layout = QVBoxLayout()
+1093: #     #板卡选择下拉框
+1094: #     board_select_group = QGroupBox("偏置源板卡")
+1095: #     board_layout = QHBoxLayout()
+1096: #     board_layout.addWidget(QLabel("当前板卡："))
+1097: #     self.bias_board_selector = QComboBox()
+1098: #     self.bias_board_selector.addItems(["偏置源板卡 1", "偏置源板卡 2", "偏置源板卡 3"])
+1099: #     #绑定选择事件
+1100: #     self.bias_board_selector.currentIndexChanged.connect(self.switch_bias_board)
+1101: #     board_layout.addWidget(self.bias_board_selector)
+1102: #     board_layout.addStretch()
+1103: #     board_select_group.setLayout(board_layout)
+1104: #     layout.addWidget(board_select_group)
+1108: #     #三块偏置源板卡的独立控件
+1109: #     # self.bias_stack = QWidget()
+1110: #     # stack_layout = QVBoxLayout()
+1111: #     # stack_layout.setContentsMargins(0,0,0,0) # 去掉内部边距
+1112: #     # self.bias_board = []
+1113: #     # for i in range(3):
+1114: #     #     bias_widget = BiasBoardWidget(board_id=i)
+1115: #     #     self.bias_board.append(bias_widget)
+1116: #     #     stack_layout.addWidget(bias_widget)
+1117: #     # self.bias_stack.setLayout(stack_layout)
+1118: #     # layout.addWidget(self.bias_stack)
+1120: #     # 新 创建滚动区域
+1121: #     scroll_area = QScrollArea()
+1122: #     scroll_area.setWidgetResizable(True) # 允许内部控件随窗口拉伸
+1123: #     scroll_area.setStyleSheet("QScrollArea { border: none; }") # 去掉难看的自带边框
+1125: #     self.bias_stack = QWidget()
+1126: #     stack_layout = QVBoxLayout()
+1127: #     stack_layout.setContentsMargins(0, 0, 0, 0)
+1129: #     self.bias_board = []
+1130: #     for i in range(3):
+1131: #         board_widget = BiasBoardWidget(board_id=i)
+1132: #         self.bias_board.append(board_widget)
+1133: #         stack_layout.addWidget(board_widget)
+1135: #     self.bias_stack.setLayout(stack_layout)
+1137: #     # 把底板装进滚动条，再把滚动条装进主布局
+1138: #     scroll_area.setWidget(self.bias_stack)
+1139: #     layout.addWidget(scroll_area)
+1141: #     #底部的控制按钮
+1142: #     button_layout = QHBoxLayout()
+1143: #     self.read_bias_btn = QPushButton("读取参数")
+1144: #     self.write_bias_btn = QPushButton("写入参数")
+1145: #     self.save_bias_btn = QPushButton("保存配置")
+1146: #     button_layout.addWidget(self.read_bias_btn)
+1147: #     button_layout.addWidget(self.write_bias_btn)
+1148: #     button_layout.addWidget(self.save_bias_btn)
+1149: #     button_layout.addStretch()
+1150: #     layout.addLayout(button_layout)
+1152: #     widget.setLayout(layout)
+1153: #     self.tabs.addTab(widget, "偏置源控制")
+1155: #     #默认显示第一块板卡的控件
+1156: #     self.switch_bias_board(0)
+1158: # def switch_bias_board(self, index):
+1159: #     #只显示当前选中的板卡界面，隐藏其他板卡界面
+1160: #     for i, board in enumerate(self.bias_board):
+1161: #         # setVisible(True) 则显示，False 则隐藏
+1162: #         board.setVisible(i == index)
+1191: # ================= 子标签页 1：ADC & FB DAC (左右并排) =================
+1200: # 左侧：ADC
+1209: # 右侧：FB DAC
+1222: # ================= 子标签页 2：选通 DAC 板 =================
+1237: # --- 底部公共控制按钮 ---
+1256: # ================= 顶部：横向双拼布局 =================
+1259: # --- 左侧：FPGA 主控制开关 (紧凑纵向排列) ---
+1283: # --- 右侧：数据存储设置 ---
+1287: # 第一行：路径选择
+1299: # 第二行：格式、前缀、自动保存间隔
+1323: # 第三行：控制按钮
+1326: # 预留槽函数连接，稍后我们会写具体的存储逻辑
+1327: # self.start_storage_btn.clicked.connect(self.start_data_storage)
+1332: # self.stop_storage_btn.clicked.connect(self.stop_data_storage)
+1337: # # 第四行：专属数据日志框
+1338: # self.data_log = QTextEdit()
+1339: # self.data_log.setReadOnly(True)
+1340: # # 用蓝色背景，把它和底部的全局灰色日志区分开
+1341: # self.data_log.setStyleSheet("background-color: #F0F8FF; font-family: Consolas;")
+1342: # storage_layout.addWidget(self.data_log)
+1349: # ================= 下半部分：PID 参数控制区 (20行16列) =================
+1350: # pid_group = QGroupBox("PID参数控制 (20行 × 16列)")
+1351: # pid_main_layout = QVBoxLayout()
+1353: # pid_param_layout = QHBoxLayout()
+1354: # self.pid_master_switch = QCheckBox("PID参数 总开关")
+1355: # self.pid_master_switch.setFont(QFont("Arial", 10, QFont.Bold))
+1356: # self.pid_master_switch.stateChanged.connect(self.toggle_all_pid)
+1357: # pid_param_layout.addWidget(self.pid_master_switch)
+1359: # pid_param_layout.addSpacing(30)
+1361: # pid_param_layout.addWidget(QLabel("P系数(HEX):"))
+1362: # self.pid_p_value = QLineEdit("0x100")
+1363: # self.pid_p_value.setMaximumWidth(80)
+1364: # pid_param_layout.addWidget(self.pid_p_value)
+1366: # pid_param_layout.addWidget(QLabel("I系数(HEX):"))
+1367: # self.pid_i_value = QLineEdit("0x1")
+1368: # self.pid_i_value.setMaximumWidth(80)
+1369: # pid_param_layout.addWidget(self.pid_i_value)
+1371: # pid_param_layout.addWidget(QLabel("D系数(HEX):"))
+1372: # self.pid_d_value = QLineEdit("0x0")
+1373: # self.pid_d_value.setMaximumWidth(80)
+1374: # pid_param_layout.addWidget(self.pid_d_value)
+1376: # pid_param_layout.addWidget(QLabel("缩放因子(HEX):"))
+1377: # self.pid_scale_value = QLineEdit("0xD")
+1378: # self.pid_scale_value.setMaximumWidth(80)
+1379: # pid_param_layout.addWidget(self.pid_scale_value)
+1381: # pid_param_layout.addStretch()
+1382: # pid_main_layout.addLayout(pid_param_layout)
+1384: # self.pid_table = QTableWidget()
+1385: # self.pid_table.setRowCount(20)
+1386: # self.pid_table.setColumnCount(16)
+1388: # row_headers = [f" {i+1} " for i in range(20)]
+1389: # col_headers = [f" {i+1} " for i in range(16)]
+1390: # self.pid_table.setVerticalHeaderLabels(row_headers)
+1391: # self.pid_table.setHorizontalHeaderLabels(col_headers)
+1393: # self.pid_switches, self.pid_values = [], []
+1395: # for row in range(20):
+1396: #     row_switches, row_values = [], []
+1397: #     for col in range(16):
+1398: #         cell_widget = QWidget()
+1399: #         cell_layout = QVBoxLayout()
+1400: #         cell_layout.setContentsMargins(5, 2, 5, 2)
+1402: #         switch = QCheckBox()
+1403: #         row_switches.append(switch)
+1404: #         cell_layout.addWidget(switch, alignment=Qt.AlignCenter) # 开关居中
+1406: #         value = QDoubleSpinBox()
+1407: #         value.setRange(-10, 10)
+1408: #         value.setDecimals(3)
+1409: #         row_values.append(value)
+1410: #         cell_layout.addWidget(value)
+1412: #         cell_widget.setLayout(cell_layout)
+1413: #         self.pid_table.setCellWidget(row, col, cell_widget)
+1415: #     self.pid_switches.append(row_switches)
+1416: #     self.pid_values.append(row_values)
+1418: # self.pid_table.horizontalHeader().setDefaultSectionSize(70)
+1419: # self.pid_table.verticalHeader().setDefaultSectionSize(65)
+1421: # pid_main_layout.addWidget(self.pid_table)
+1422: # pid_group.setLayout(pid_main_layout)
+1423: # # main_layout.addWidget(pid_group)
+1424: # main_layout.addWidget(pid_group, stretch=1)
+1425: # widget.setLayout(main_layout)
+1426: # self.tabs.addTab(widget, "FPGA数据汇总")
+1427: # ================= 下半部分：PID 参数控制区 (20行16列) =================
+1439: # 顶部的全局 PID 输入框 (注意我给它们加上了 .editingFinished 的联动)
+1481: # 表头颜色由 ColoredHeaderView 绘制，避免样式表覆盖 setBackground。
+1482: # 显式实例化表头对象，并赋上默认的浅灰色
+1493: # 绑定行列号（表头）的单击和双击事件
+1498: # row_headers = [f" {i+1} " for i in range(20)]
+1499: # col_headers = [f" {i+1} " for i in range(16)]
+1500: # self.pid_table.setVerticalHeaderLabels(row_headers)
+1501: # self.pid_table.setHorizontalHeaderLabels(col_headers)
+1503: # 原来装 checkbox 和 value 的两个列表，现在只需要一个存卡片的列表即可
+1510: # 将卡片的“被点击”信号，连到主窗口的处理函数上
+1529: # 【修改】：采用极其硬核的等宽日志风格
+1534: # 【修改】
+1563: # --- 总开关 ---
+1574: # --- 表头 ---
+1588: # DAC 部分
+1600: # Offset 部分
+1612: # 同样的排版魔法
+1679: # def setup_adc_control(self, parent_layout):
+1680: #     """ADC读出控制 (左侧部分)"""
+1681: #     group = QGroupBox("ADC读出控制 (16列)")
+1682: #     layout = QGridLayout()
+1684: #     # 总开关
+1685: #     self.adc_master_switch = QCheckBox("ADC 总开关")
+1686: #     self.adc_master_switch.setFont(QFont("Arial", 9, QFont.Bold))
+1687: #     self.adc_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.adc_switches])
+1688: #     layout.addWidget(self.adc_master_switch, 0, 1, 1, 2)
+1690: #     self.adc_offset_master_switch = QCheckBox("ADC offset 总开关")
+1691: #     self.adc_offset_master_switch.setFont(QFont("Arial", 9, QFont.Bold))
+1692: #     self.adc_offset_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.adc_offset_switches])
+1693: #     layout.addWidget(self.adc_offset_master_switch, 0, 3, 1, 2)
+1695: #     # 表头
+1696: #     headers = ["列", "ADC开关", "ADC输出值", "offset开关", "offset值"]
+1697: #     for col, text in enumerate(headers):
+1698: #         layout.addWidget(QLabel(text), 1, col)
+1700: #     self.adc_switches, self.adc_values = [], []
+1701: #     self.adc_offset_switches, self.adc_offset_values = [], []
+1703: #     # 16路通道
+1704: #     for i in range(16):
+1705: #         row = i + 2
+1706: #         layout.addWidget(QLabel(f"列{i+1}"), row, 0)
+1708: #         # ADC
+1709: #         adc_switch = QCheckBox()
+1710: #         self.adc_switches.append(adc_switch)
+1711: #         layout.addWidget(adc_switch, row, 1)
+1732: # 状态 1：明确要求【连接】
+1752: # Propagate to bias boards if applicable
+1759: # 状态 2：明确要求【断开】
+1763: # 状态 3：如果是连接中等其他状态，直接无视（防狂点）
+1769: # --- 1. 顶部的参数设置区 ---
+1814: # --- 2. 20行的矩阵控制区 ---
+1829: # 优化表头，去掉“行”字
+1836: # 画贯穿 20 行的垂直分割线
+1874: # --- 组装选通 DAC 页面 ---
+1876: # 把两块包在一个垂直布局里，再整体靠左
+1903: # 只有明确处于“连接”待机状态的按钮，才去触发
+1918: # Propagate to bias boards if applicable
+1930: # Propagate to bias boards if applicable
+1938: # QMessageBox.warning(self, "连接失败", f"{board_type} 连接失败:\n{error_msg}")
+1944: # Update without triggering feedback loop
+1962: # Try to decode as text (like TDM_V4 did for string responses)
+1966: # Fallback to Hex preview for binary frames
+1984: # =================【模拟生成二进制指令】=================
+2000: # 纯异步发送，无需等待回复
+2013: # 【修改】：打入专属数据日志
+2019: #获取当前选中的板卡索引
+2037: # PID交互
+2038: # ================= PID 矩阵交互与智能对比逻辑 =================
+2065: # 只有没有被独立设置的卡片，才会被全局修改覆盖
+2069: # 覆盖完后，刷新一遍颜色
+2185: # Use Fusion as base to ensure cross-platform geometry consistency
+2188: # Apply a global Modern Light Theme to force beautiful rounded corners
+2189: # and soft borders on all platforms, mimicking macOS aesthetics.

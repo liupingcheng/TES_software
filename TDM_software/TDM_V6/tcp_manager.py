@@ -3,15 +3,14 @@ from tcp_client import TCPClient
 
 class TCPManager(QObject):
     """
-    Manages multiple TCPClient connections (e.g. Bias1, Bias2, Bias3, FPGA)
-    and multiplexes their signals to the main application.
+    管理多个 TCPClient 连接 (如 Bias1, Bias2, Bias3, FPGA)，
+    并将其信号统一多路复用到主程序中。
     """
-    # Multiplexed signals
-    board_connected = pyqtSignal(str) # board_type
-    board_disconnected = pyqtSignal(str, str) # board_type, error_msg
-    board_data_sent = pyqtSignal(str, int) # board_type, bytes_sent
-    board_data_received = pyqtSignal(str, int, bytes) # board_type, bytes_received, raw_data
-    board_probe_finished = pyqtSignal(str, bool, str) # board_type, success, msg
+    board_connected = pyqtSignal(str)
+    board_disconnected = pyqtSignal(str, str)
+    board_data_sent = pyqtSignal(str, int)
+    board_data_received = pyqtSignal(str, int, bytes)
+    board_probe_finished = pyqtSignal(str, bool, str)
 
     def __init__(self):
         super().__init__()
@@ -20,7 +19,6 @@ class TCPManager(QObject):
     def _get_or_create_client(self, board_type: str) -> TCPClient:
         if board_type not in self.clients:
             client = TCPClient()
-            # Hook up signals, injecting board_type
             client.connected.connect(lambda b=board_type: self.board_connected.emit(b))
             client.disconnected.connect(lambda err, b=board_type: self.board_disconnected.emit(b, err))
             client.data_sent.connect(lambda bytes_sent, b=board_type: self.board_data_sent.emit(b, bytes_sent))

@@ -43,8 +43,8 @@ class SafeDoubleSpinBox(_QDoubleSpinBox):
 
 
 class ChannelControl(QWidget):
-    # Signal emitted when "Send" is clicked
-    # Args: (ch_idx, wtype, freq, amp_norm, offset_mA)
+    # "Set" 按钮按下时触发信号
+    # 参数: (通道索引, 波形类型, 频率, 归一化幅值, 偏置电流)
     send_clicked = pyqtSignal(int, int, float, float, float)
     
     def __init__(self, chip_id, ch_idx, parent=None):
@@ -75,12 +75,12 @@ class ChannelControl(QWidget):
         
         form_layout = QFormLayout()
         
-        # Waveform Type
+        # 波形类型
         self.combo_type = SafeComboBox()
         self.combo_type.addItems(["Sine", "Square", "Triangle", "DC"])
         form_layout.addRow("Type:", self.combo_type)
         
-        # Frequency (Hz)
+        # 频率 (Hz)
         self.spin_freq = SafeDoubleSpinBox()
         self.spin_freq.setRange(0, 10_000_000) # 0 to 10MHz
         self.spin_freq.setSuffix(" Hz")
@@ -88,7 +88,7 @@ class ChannelControl(QWidget):
         self.spin_freq.setValue(1000.0)
         form_layout.addRow("Freq:", self.spin_freq)
         
-        # Amplitude (Normalized 0.0 - 1.0)
+        # 幅值 (归一化 0.0 - 1.0)
         self.spin_amp = SafeDoubleSpinBox()
         self.spin_amp.setRange(0.0, 1.0)
         self.spin_amp.setSingleStep(0.01)
@@ -96,7 +96,7 @@ class ChannelControl(QWidget):
         self.spin_amp.setValue(0.5)
         form_layout.addRow("Amp (0-1):", self.spin_amp)
         
-        # Offset (0.0 - 20.0 mA)
+        # 偏置电流 (0.0 - 20.0 mA)
         self.spin_offset = SafeDoubleSpinBox()
         self.spin_offset.setRange(0.0, 20.0)
         self.spin_offset.setSuffix(" mA")
@@ -104,7 +104,7 @@ class ChannelControl(QWidget):
         self.spin_offset.setValue(0.0)
         form_layout.addRow("Offset (0-20mA):", self.spin_offset)
         
-        # Send Button
+        # 设置按钮
         self.btn_send = QPushButton("Set")
         self.btn_send.clicked.connect(self.on_send)
         form_layout.addRow("", self.btn_send)

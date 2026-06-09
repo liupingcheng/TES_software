@@ -6,12 +6,12 @@ from chip_widget import ChipControl
 import datetime
 
 class TDMBiasWidget(QWidget):
-    # Signals for syncing with main window
-    sync_params_signal = pyqtSignal(str, str, str, str) # board_type, ip, port, local_ip
-    connect_clicked_signal = pyqtSignal(str) # board_type
-    probe_clicked_signal = pyqtSignal(str) # board_type
-    send_data_signal = pyqtSignal(str, bytes) # board_type, data
-    log_signal = pyqtSignal(str) # msg
+    # 与主窗口同步的信号
+    sync_params_signal = pyqtSignal(str, str, str, str)
+    connect_clicked_signal = pyqtSignal(str)
+    probe_clicked_signal = pyqtSignal(str)
+    send_data_signal = pyqtSignal(str, bytes)
+    log_signal = pyqtSignal(str)
     
     def __init__(self, board_type, board_name="Bias Board", default_ip="", default_port="24", default_local_ip="", parent=None):
         super().__init__(parent)
@@ -20,18 +20,18 @@ class TDMBiasWidget(QWidget):
         self.default_ip = default_ip
         self.default_port = default_port
         self.default_local_ip = default_local_ip
-        self.is_connected = False # managed by parent
+        self.is_connected = False  # 由父组件管理连接状态
         
         self.init_ui()
         
     def init_ui(self):
         main_layout = QVBoxLayout()
         
-        # --- Top Bar: Connection ---
+        # 顶部连接栏
         conn_layout = QHBoxLayout()
         conn_layout.addStretch()
         
-        # Board name badge to explicitly show which bias board this is
+        # 板卡名称标签 (用作状态指示)
         short_name = self.board_name.split('-')[-1] if '-' in self.board_name else self.board_name
         self.lbl_board_name = QLabel(f" {short_name} ")
         self.lbl_board_name.setStyleSheet("""
@@ -75,11 +75,11 @@ class TDMBiasWidget(QWidget):
         conn_layout.addStretch()
         main_layout.addLayout(conn_layout)
         
-        # --- Tabs for Chips ---
+        # 芯片控制标签页
         self.tabs = QTabWidget()
         self.chip_widgets = []
         
-        # Create 6 Tabs for 6 Chips (DAC0 - DAC5)
+        # 创建 6 个 DAC 芯片控制页
         for i in range(6):
             chip_ui = ChipControl(i)
             chip_ui.send_request.connect(self.send_packet)
@@ -96,7 +96,7 @@ class TDMBiasWidget(QWidget):
         self.sync_params_signal.emit(self.board_type, ip, port, local_ip)
         
     def set_connection_params(self, ip, port, local_ip):
-        # Update without emitting signal to avoid infinite loop
+        # 阻止信号发射，避免死循环同步
         self.txt_ip.blockSignals(True)
         self.txt_port.blockSignals(True)
         self.txt_local_ip.blockSignals(True)
@@ -148,7 +148,7 @@ class TDMBiasWidget(QWidget):
 
     def send_packet(self, data, desc):
         if not self.is_connected:
-            self.log("Error: Cannot send command, TCP not connected.")
+            self.log("发送失败: TCP 未连接")
             return
         
         self.log(f"TX: {desc} ({len(data)} bytes)")

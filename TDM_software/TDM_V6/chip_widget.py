@@ -4,7 +4,7 @@ from channel_widget import ChannelControl
 from bias_protocol import ProtocolEncoder
 
 class ChipControl(QWidget):
-    # Signal: (bytes_data, description_str)
+    # 发送请求信号: (字节数据, 描述字符串)
     send_request = pyqtSignal(bytes, str)
     
     def __init__(self, chip_id, parent=None):
@@ -15,23 +15,22 @@ class ChipControl(QWidget):
     def init_ui(self):
         layout = QGridLayout()
         
-        # Create 8 channel widgets in a 2x4 grid
+        # 创建 8 个通道控制组件 (2行4列)
         for i in range(8):
             ch_widget = ChannelControl(self.chip_id, i)
             ch_widget.send_clicked.connect(self.on_channel_send)
-            # Row = i // 4, Col = i % 4
             layout.addWidget(ch_widget, i // 4, i % 4)
             
         self.setLayout(layout)
         
     def on_channel_send(self, ch_idx, wtype, freq, amp_norm, offset_mA):
-        # Generate packets
+        # 生成协议数据包
         data = ProtocolEncoder.commands_for_channel_config(
             self.chip_id, ch_idx, wtype, freq, amp_norm, offset_mA
         )
         
-        # Create description string for logging
-        desc = (f"DAC{self.chip_id}-Ch{ch_idx}: Set Type={wtype}, "
+        # 生成日志描述信息
+        desc = (f"DAC{self.chip_id}-Ch{ch_idx}: Type={wtype}, "
                 f"Freq={freq:.1f}Hz, Amp={amp_norm:.3f}, Offset={offset_mA:.3f}mA")
         
         self.send_request.emit(data, desc)

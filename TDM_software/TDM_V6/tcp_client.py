@@ -5,8 +5,8 @@ import time
 
 class TCPClient(QObject):
     connected = pyqtSignal()
-    disconnected = pyqtSignal(str) # Error msg
-    data_sent = pyqtSignal(int)    # Bytes sent
+    disconnected = pyqtSignal(str)     # 错误信息
+    data_sent = pyqtSignal(int)        # 已发送字节数
     data_received = pyqtSignal(int, bytes)
     probe_finished = pyqtSignal(bool, str)
     
@@ -28,7 +28,7 @@ class TCPClient(QObject):
         sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # Socket Optimizations for Hardware Control
+            # 硬件控制的 Socket 优化
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             
@@ -55,7 +55,7 @@ class TCPClient(QObject):
         self._stop_event.set()
         
         sock = self.sock
-        self.sock = None # Detach first to prevent race in _recv_loop
+        self.sock = None  # 提前解除绑定以防接收线程竞争
         self.is_connected = False
         self._recv_thread = None
         
