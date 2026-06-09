@@ -5,6 +5,36 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from chip_widget import ChipControl
 import datetime
 
+
+class SafeLineEdit(QLineEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._original_value = self.text()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self._original_value = self.text()
+        self.setStyleSheet("background-color: #FFFF99;")
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            super().keyPressEvent(event)
+            self._original_value = self.text()
+            self.setStyleSheet("")
+            self.clearFocus()
+        elif event.key() == Qt.Key_Escape:
+            self.setText(self._original_value)
+            self.setStyleSheet("")
+            self.clearFocus()
+        else:
+            super().keyPressEvent(event)
+            
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.setStyleSheet("")
+        # If we didn't press enter, revert value? Usually clicking away keeps the typed value unless we revert
+        # We will keep the typed value but it won't emit returnPressed
+
 class TDMBiasWidget(QWidget):
     # 与主窗口同步的信号
     sync_params_signal = pyqtSignal(str, str, str, str)
@@ -47,20 +77,20 @@ class TDMBiasWidget(QWidget):
         conn_layout.addWidget(self.lbl_board_name)
         
         conn_layout.addWidget(QLabel("IP Address:"))
-        self.txt_ip = QLineEdit(self.default_ip)
-        self.txt_ip.textChanged.connect(self.on_params_changed)
+        self.txt_ip = SafeLineEdit(self.default_ip)
+        self.txt_ip.returnPressed.connect(self.on_params_changed)
         conn_layout.addWidget(self.txt_ip)
         
         conn_layout.addWidget(QLabel("Port:"))
-        self.txt_port = QLineEdit(self.default_port)
+        self.txt_port = SafeLineEdit(self.default_port)
         self.txt_port.setFixedWidth(60)
-        self.txt_port.textChanged.connect(self.on_params_changed)
+        self.txt_port.returnPressed.connect(self.on_params_changed)
         conn_layout.addWidget(self.txt_port)
 
         conn_layout.addWidget(QLabel("Local IP:"))
-        self.txt_local_ip = QLineEdit(self.default_local_ip)
+        self.txt_local_ip = SafeLineEdit(self.default_local_ip)
         self.txt_local_ip.setFixedWidth(140)
-        self.txt_local_ip.textChanged.connect(self.on_params_changed)
+        self.txt_local_ip.returnPressed.connect(self.on_params_changed)
         conn_layout.addWidget(self.txt_local_ip)
         
         self.btn_connect = QPushButton("Connect")
@@ -154,3 +184,24 @@ class TDMBiasWidget(QWidget):
         
         self.log(f"TX: {desc} ({len(data)} bytes)")
         self.send_data_signal.emit(self.board_type, data)
+
+    def get_board_config(self):
+        config = {
+            "type": "bias_board",
+            "board_ip": self.default_ip,
+            "dacs": {}
+        }
+        for idx in range(len(self.chip_widgets)):
+            config["dacs"][f"dac_{idx}"] = self.chip_widgets[idx].get_config()
+        return config
+        
+    def set_board_config(self, data):
+        if data.get("type") != "bias_board":
+            return False, "参数类型不匹配 (期望 bias_board)"
+            
+        dacs_cfg = data.get("dacs", {})
+        for idx in range(len(self.chip_widgets)):
+            dac_key = f"dac_{idx}"
+            if dac_key in dacs_cfg:
+                self.chip_widgets[idx].set_config(dacs_cfg[dac_key])
+        return True, "读取成功"

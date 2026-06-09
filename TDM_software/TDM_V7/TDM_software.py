@@ -1,6 +1,10 @@
+#V5 PID参数界面优化，增加单元格预选和批量编辑功能
 #V6 整合子豪的bias界面连接控制逻辑
-
+#V7 增加参数存储，日志保存
 import sys
+import json
+import datetime
+from PyQt5.QtWidgets import QFileDialog
 import time
 import socket
 import struct
@@ -203,6 +207,23 @@ class PIDCellWidget(QFrame):
             self.window().clear_pid_selection()
         self.update_color()
         super().mouseDoubleClickEvent(event)
+
+
+
+    def get_config(self):
+        return {
+            "p": self.p_edit.text(),
+            "i": self.i_edit.text(),
+            "d": self.d_edit.text(),
+            "s": self.s_edit.text()
+        }
+        
+    def set_config(self, cfg):
+        if "p" in cfg: self.p_edit.setText(cfg["p"])
+        if "i" in cfg: self.i_edit.setText(cfg["i"])
+        if "d" in cfg: self.d_edit.setText(cfg["d"])
+        if "s" in cfg: self.s_edit.setText(cfg["s"])
+        self.update_color()
 
     def update_color(self):
         """颜色优先级：红色预选 > 灰色禁用 > 蓝色独立 > 绿色跟随"""
@@ -685,6 +706,34 @@ class BiasBoardWidget(QWidget):
 
 
 
+
+class SafeLineEdit(QLineEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._original_value = self.text()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self._original_value = self.text()
+        self.setStyleSheet("background-color: #FFFF99;")
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            super().keyPressEvent(event)
+            self._original_value = self.text()
+            self.setStyleSheet("")
+            self.clearFocus()
+        elif event.key() == Qt.Key_Escape:
+            self.setText(self._original_value)
+            self.setStyleSheet("")
+            self.clearFocus()
+        else:
+            super().keyPressEvent(event)
+            
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.setStyleSheet("")
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -696,8 +745,184 @@ class MainWindow(QMainWindow):
         self.tcp_manager.board_probe_finished.connect(self.on_board_probe_finished)
         self.init_ui()
         
+    
+    def get_adda_adcfb_config(self):
+        config = {'adc': {}, 'fb_dac': {}}
+        for i, sw in enumerate(self.adc_switches):
+            config['adc'][f'sw_{i}'] = sw.checkState()
+        for i, ed in enumerate(self.adc_offset_edits):
+            config['adc'][f'offset_{i}'] = ed.value()
+        for i, sw in enumerate(self.adc_offset_switches):
+            config['adc'][f'offset_sw_{i}'] = sw.checkState()
+            
+        for i, sw in enumerate(self.fb_dac_switches):
+            config['fb_dac'][f'sw_{i}'] = sw.checkState()
+        for i, ed in enumerate(self.fb_dac_offset_edits):
+            config['fb_dac'][f'offset_{i}'] = ed.value()
+        for i, sw in enumerate(self.fb_dac_offset_switches):
+            config['fb_dac'][f'offset_sw_{i}'] = sw.checkState()
+        return {"type": "adda_adcfb", "config": config}
+
+    def set_adda_adcfb_config(self, data):
+        if data.get("type") != "adda_adcfb": return False
+        cfg = data.get("config", {})
+        adc = cfg.get("adc", {})
+        fb = cfg.get("fb_dac", {})
+        for i, sw in enumerate(self.adc_switches):
+            if f'sw_{i}' in adc: sw.setCheckState(adc[f'sw_{i}'])
+        for i, ed in enumerate(self.adc_offset_edits):
+            if f'offset_{i}' in adc: ed.setValue(adc[f'offset_{i}'])
+        for i, sw in enumerate(self.adc_offset_switches):
+            if f'offset_sw_{i}' in adc: sw.setCheckState(adc[f'offset_sw_{i}'])
+            
+        for i, sw in enumerate(self.fb_dac_switches):
+            if f'sw_{i}' in fb: sw.setCheckState(fb[f'sw_{i}'])
+        for i, ed in enumerate(self.fb_dac_offset_edits):
+            if f'offset_{i}' in fb: ed.setValue(fb[f'offset_{i}'])
+        for i, sw in enumerate(self.fb_dac_offset_switches):
+            if f'offset_sw_{i}' in fb: sw.setCheckState(fb[f'offset_sw_{i}'])
+        return True
+
+    def get_adda_gate_config(self):
+        config = {'gate_dac': {}}
+        for i, sw in enumerate(self.gate_dac_switches):
+            config['gate_dac'][f'sw_{i}'] = sw.checkState()
+        for i, ed in enumerate(self.gate_dac_offset_edits):
+            config['gate_dac'][f'offset_{i}'] = ed.value()
+        for i, sw in enumerate(self.gate_dac_offset_switches):
+            config['gate_dac'][f'offset_sw_{i}'] = sw.checkState()
+        return {"type": "adda_gate", "config": config}
+
+    def set_adda_gate_config(self, data):
+        if data.get("type") != "adda_gate": return False
+        cfg = data.get("config", {}).get("gate_dac", {})
+        for i, sw in enumerate(self.gate_dac_switches):
+            if f'sw_{i}' in cfg: sw.setCheckState(cfg[f'sw_{i}'])
+        for i, ed in enumerate(self.gate_dac_offset_edits):
+            if f'offset_{i}' in cfg: ed.setValue(cfg[f'offset_{i}'])
+        for i, sw in enumerate(self.gate_dac_offset_switches):
+            if f'offset_sw_{i}' in cfg: sw.setCheckState(cfg[f'offset_sw_{i}'])
+        return True
+
+    def get_fpga_config(self):
+        config = {'pid': {}, 'switches': {}}
+        for row in range(32):
+            for col in range(8):
+                w = self.pid_table.cellWidget(row, col)
+                if w:
+                    config['pid'][f"{row}_{col}"] = w.get_config()
+        config['switches']['data_read'] = self.data_read_switch.checkState()
+        config['switches']['fb_control'] = self.fb_control_switch.checkState()
+        config['switches']['gate_control'] = self.gate_control_switch.checkState()
+        return {"type": "fpga", "config": config}
+
+    def set_fpga_config(self, data):
+        if data.get("type") != "fpga": return False
+        cfg = data.get("config", {})
+        pid = cfg.get("pid", {})
+        switches = cfg.get("switches", {})
+        for row in range(32):
+            for col in range(8):
+                w = self.pid_table.cellWidget(row, col)
+                if w and f"{row}_{col}" in pid:
+                    w.set_config(pid[f"{row}_{col}"])
+        if 'data_read' in switches: self.data_read_switch.setCheckState(switches['data_read'])
+        if 'fb_control' in switches: self.fb_control_switch.setCheckState(switches['fb_control'])
+        if 'gate_control' in switches: self.gate_control_switch.setCheckState(switches['gate_control'])
+        return True
+
+
+    def save_connection_log(self):
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"TDM_Log_{ts}.txt"
+        file_path, _ = QFileDialog.getSaveFileName(self, "保存日志", default_name, "Text Files (*.txt)")
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(self.connection_log.toPlainText())
+                self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 日志已成功保存至: {file_path}")
+            except Exception as e:
+                self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 保存日志失败: {str(e)}")
+
+    def save_current_page_config(self):
+        tab_idx = self.tabs.currentIndex()
+        data = None
+        default_name = ""
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+        
+        if tab_idx == 1:
+            bias_board = self.bias_sub_tabs.currentWidget()
+            if bias_board:
+                data = bias_board.get_board_config()
+                if data:
+                    ip = data['board_ip'].replace('.', '_')
+                    default_name = f"Bias_{ip}_{ts}.json"
+        elif tab_idx == 2:
+            sub_idx = self.ad_da_sub_tabs.currentIndex()
+            if sub_idx == 0:
+                data = self.get_adda_adcfb_config()
+                default_name = f"ADDA_ADC_FB_{ts}.json"
+            elif sub_idx == 1:
+                data = self.get_adda_gate_config()
+                default_name = f"ADDA_Gate_{ts}.json"
+        elif tab_idx == 3:
+            data = self.get_fpga_config()
+            default_name = f"FPGA_Config_{ts}.json"
+            
+        if not data:
+            self.connection_log.append("[系统] 当前页面不支持保存或未找到参数！")
+            return
+            
+        file_path, _ = QFileDialog.getSaveFileName(self, "保存页面参数", default_name, "JSON Files (*.json)")
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=4)
+                self.connection_log.append(f"[系统] 页面参数已成功保存至: {file_path}")
+            except Exception as e:
+                self.connection_log.append(f"[系统] 保存失败: {str(e)}")
+
+    def load_current_page_config(self):
+        tab_idx = self.tabs.currentIndex()
+        if tab_idx == 0:
+            self.connection_log.append("[系统] 当前页面不支持读取参数！")
+            return
+            
+        file_path, _ = QFileDialog.getOpenFileName(self, "读取页面参数", "", "JSON Files (*.json)")
+        if not file_path: return
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            success = False
+            msg = ""
+            if tab_idx == 1:
+                bias_board = self.bias_sub_tabs.currentWidget()
+                if bias_board:
+                    success, msg = bias_board.set_board_config(data)
+            elif tab_idx == 2:
+                sub_idx = self.ad_da_sub_tabs.currentIndex()
+                if sub_idx == 0:
+                    success = self.set_adda_adcfb_config(data)
+                    msg = "读取成功" if success else "参数类型不匹配"
+                elif sub_idx == 1:
+                    success = self.set_adda_gate_config(data)
+                    msg = "读取成功" if success else "参数类型不匹配"
+            elif tab_idx == 3:
+                success = self.set_fpga_config(data)
+                msg = "读取成功" if success else "参数类型不匹配"
+                
+            if success:
+                self.connection_log.append(f"[系统] 从 {file_path} 读取并恢复了参数")
+            else:
+                self.connection_log.append(f"[系统] 恢复失败: {msg}")
+                
+        except Exception as e:
+            self.connection_log.append(f"[系统] 读取异常: {str(e)}")
+
     def init_ui(self):
-        self.setWindowTitle("TES-SQUID TDM 上位机控制软件")
+        self.setWindowTitle("TDM Software")
         self.setGeometry(100, 100, 1200, 800)
         
         main_widget = QWidget()
@@ -763,6 +988,32 @@ class MainWindow(QMainWindow):
         status_group.setLayout(status_layout)
         bottom_layout.addWidget(status_group, stretch=1) # 状态面板占 1 份
         
+        # --- 右侧边缘：页面参数管理 ---
+        config_group = QGroupBox("页面参数管理")
+        config_layout = QVBoxLayout()
+        config_layout.setSpacing(10)
+        
+        self.btn_save_page = QPushButton("保存参数")
+        self.btn_save_page.setFixedHeight(35)
+        self.btn_save_page.clicked.connect(self.save_current_page_config)
+        
+        self.btn_load_page = QPushButton("读取参数")
+        self.btn_load_page.setFixedHeight(35)
+        self.btn_load_page.clicked.connect(self.load_current_page_config)
+        
+        self.btn_save_log = QPushButton("保存日志")
+        self.btn_save_log.setFixedHeight(35)
+        self.btn_save_log.clicked.connect(self.save_connection_log)
+        
+        config_layout.addWidget(self.btn_save_page)
+        config_layout.addWidget(self.btn_load_page)
+        config_layout.addWidget(self.btn_save_log)
+        config_layout.addStretch()
+        config_group.setLayout(config_layout)
+        config_group.setMaximumWidth(140)  # 限制最大宽度，使其看起来更紧凑
+        
+        bottom_layout.addWidget(config_group, stretch=0) # 取消拉伸权重，让它保持自身所需的最小宽度
+        
         main_layout.addLayout(bottom_layout, stretch=1) # 底座整体占据 20% 高度
         
         # ================= 3. 初始化选项卡 =================
@@ -809,13 +1060,13 @@ class MainWindow(QMainWindow):
             connection_layout.addWidget(name_label, i, 0) 
             
             # 第2列：IP 地址输入框
-            ip_edit = QLineEdit(default_ip) 
+            ip_edit = SafeLineEdit(default_ip) 
             ip_edit.setMinimumWidth(120) 
             self.board_ip_edits[board_type] = ip_edit 
             connection_layout.addWidget(ip_edit, i, 1)
             
             # 第3列：端口输入框
-            port_edit = QLineEdit("24")
+            port_edit = SafeLineEdit("24")
             port_edit.setMaximumWidth(60)
             self.board_port_edits[board_type] = port_edit
             connection_layout.addWidget(QLabel("Port:"), i, 2)
@@ -921,9 +1172,9 @@ class MainWindow(QMainWindow):
             port_edit = self.board_port_edits[board_type]
             local_ip_edit = self.board_local_ip_edits[board_type]
             
-            ip_edit.textChanged.connect(lambda txt, bw=board_widget: bw.set_connection_params(txt, bw.txt_port.text(), bw.txt_local_ip.text()))
-            port_edit.textChanged.connect(lambda txt, bw=board_widget: bw.set_connection_params(bw.txt_ip.text(), txt, bw.txt_local_ip.text()))
-            local_ip_edit.textChanged.connect(lambda txt, bw=board_widget: bw.set_connection_params(bw.txt_ip.text(), bw.txt_port.text(), txt))
+            ip_edit.returnPressed.connect(lambda bw=board_widget, e=ip_edit: bw.set_connection_params(e.text(), bw.txt_port.text(), bw.txt_local_ip.text()))
+            port_edit.returnPressed.connect(lambda bw=board_widget, e=port_edit: bw.set_connection_params(bw.txt_ip.text(), e.text(), bw.txt_local_ip.text()))
+            local_ip_edit.returnPressed.connect(lambda bw=board_widget, e=local_ip_edit: bw.set_connection_params(bw.txt_ip.text(), bw.txt_port.text(), e.text()))
             
             self.bias_boards.append(board_widget)
             
@@ -1399,11 +1650,11 @@ class MainWindow(QMainWindow):
             ipaddress.ip_address(ip)
         except ValueError:
             msg = f"{board_type} Invalid IP Address: {ip}"
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
             QMessageBox.warning(self, "Test Link Failed", msg)
             return
 
-        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} Test Link started ({ip}:{port})... (5s)")
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} Test Link started ({ip}:{port})... (5s)")
         self.tcp_manager.probe_board(board_type, ip, port, 5.0, local_ip)
 
     def connect_single_board(self, board_type):
@@ -1421,11 +1672,11 @@ class MainWindow(QMainWindow):
                 ipaddress.ip_address(ip)
             except ValueError:
                 msg = f"{board_type} 的 IP 地址格式无效: {ip}"
-                self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+                self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
                 QMessageBox.warning(self, "连接失败", msg)
                 return
 
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 正在后台尝试连接 ({ip}:{port})...")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 正在后台尝试连接 ({ip}:{port})...")
             
             self.board_name_labels[board_type].setStyleSheet("background-color: orange; color: white; padding: 4px; border-radius: 4px;")
             self.board_connection_btns[board_type].setEnabled(False)
@@ -1561,23 +1812,9 @@ class MainWindow(QMainWindow):
         
         parent_layout.addLayout(wrapper)
         
-    def probe_single_board(self, board_type):
-        """探测单个板卡的网络链路状态"""
-        ip = self.board_ip_edits[board_type].text().strip()
-        try:
-            ipaddress.ip_address(ip)
-        except ValueError:
-            msg = f"{board_type} Invalid IP Address: {ip}"
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
-            QMessageBox.warning(self, "Test Link Failed", msg)
-            return
-
-        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} Test Link started ({ip})... (5s)")
-        self.tcp_manager.probe_board(board_type, ip, 24, 5.0)
-
     def connect_all_boards(self):
         """一键连接所有板卡 (严格判断状态)"""
-        self.connection_log.append(f"\n[{time.strftime('%H:%M:%S')}] 开始尝试连接未连的板卡...")
+        self.connection_log.append(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始尝试连接未连的板卡...")
         for board_type in self.board_ip_edits.keys():
             # 只有明确处于“连接”待机状态的按钮，才去触发
             if self.board_connection_btns[board_type].text() == "Connect":
@@ -1585,14 +1822,24 @@ class MainWindow(QMainWindow):
 
     def disconnect_all_boards(self):
         """一键断开所有板卡 (严格判断状态)"""
-        self.connection_log.append(f"\n[{time.strftime('%H:%M:%S')}] 开始断开已连的板卡...")
+        has_connected = False
+        for btn in self.board_connection_btns.values():
+            if btn.text() == "Disconnect":
+                has_connected = True
+                break
+                
+        if not has_connected:
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 当前没有任何已连接的板卡。")
+            return
+            
+        self.connection_log.append(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始断开已连的板卡...")
         self.tcp_manager.disconnect_all()
 
     def on_board_connected(self, board_type):
         self.board_connection_btns[board_type].setEnabled(True)
         self.board_name_labels[board_type].setStyleSheet("background-color: #2ecc71; color: white; padding: 4px; border-radius: 4px;")
         self.board_connection_btns[board_type].setText("Disconnect")
-        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接成功！")
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接成功！")
         
         # Propagate to bias boards if applicable
         for bw in getattr(self, "bias_boards", []):
@@ -1613,10 +1860,10 @@ class MainWindow(QMainWindow):
         
         reason = f" ({error_msg})" if error_msg else ""
         if was_connecting:
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接失败{reason}")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接失败{reason}")
             # QMessageBox.warning(self, "连接失败", f"{board_type} 连接失败:\n{error_msg}")
         else:
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接已断开{reason}")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接已断开{reason}")
 
     def on_bias_sync_params(self, board_type, ip, port, local_ip):
         if board_type in self.board_ip_edits:
@@ -1634,30 +1881,30 @@ class MainWindow(QMainWindow):
             self.board_local_ip_edits[board_type].blockSignals(False)
 
     def log_from_bias(self, msg):
-        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
     def on_board_data_received(self, board_type, length, raw_data):
         try:
             # Try to decode as text (like TDM_V4 did for string responses)
             response_str = raw_data.decode('utf-8', errors='strict').strip()
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] <- 收到 {board_type} 回复: {response_str}")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] <- 收到 {board_type} 回复: {response_str}")
         except UnicodeDecodeError:
             # Fallback to Hex preview for binary frames
             hex_preview = raw_data.hex().upper()
             if len(hex_preview) > 40:
                 hex_preview = hex_preview[:40] + "..."
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] <- 收到 {board_type} 数据包: {length} 字节 [{hex_preview}]")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] <- 收到 {board_type} 数据包: {length} 字节 [{hex_preview}]")
 
     def on_board_probe_finished(self, board_type, success, msg):
-        status = "✅ Test Link Success" if success else "❌ Test Link Failed"
-        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {status}: {board_type} {msg}")
+        status = "Test Link Success" if success else "Test Link Failed"
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {status}: {board_type} {msg}")
 
     def on_test_send_clicked(self):
         """点击测试发送按钮"""
         board_type = self.test_board_selector.currentText()
         
         if not self.tcp_manager.is_connected(board_type):
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 错误: {board_type} 尚未连接！")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 错误: {board_type} 尚未连接！")
             return
             
         # =================【模拟生成二进制指令】=================
@@ -1673,7 +1920,7 @@ class MainWindow(QMainWindow):
         )
         
         hex_str = ' '.join([f'{b:02X}' for b in test_frame])
-        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] -> 发送给 {board_type}:")
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] -> 发送给 {board_type}:")
         self.connection_log.append(f"HEX: {hex_str}")
         
         # 纯异步发送，无需等待回复
@@ -1690,7 +1937,7 @@ class MainWindow(QMainWindow):
         if directory:
             self.storage_path.setText(directory)
             # 【修改】：打入专属数据日志
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 存储路径已更新: {directory}")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 存储路径已更新: {directory}")
 
                 
     def on_write_bias_clicked(self):
@@ -1700,7 +1947,7 @@ class MainWindow(QMainWindow):
         current_board_widget = self.bias_boards[current_index]
         board_type = f"Bias{current_index+1}"
         if not self.tcp_manager.is_connected(board_type):
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 错误: {board_type} 尚未连接！")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 错误: {board_type} 尚未连接！")
             QMessageBox.warning(self, "警告", f"尚未连接 {board_type} 板卡！")
             return         
         
@@ -1709,9 +1956,9 @@ class MainWindow(QMainWindow):
             for pkt in packets:
                 self.tcp_manager.send_data(board_type, pkt)
                 
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 已向 {board_type} 发送写入指令 ({len(packets)} 条)")           
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 已向 {board_type} 发送写入指令 ({len(packets)} 条)")           
         except Exception as e:
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 写入失败: {str(e)}")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 写入失败: {str(e)}")
  
 # PID交互
 # ================= PID 矩阵交互与智能对比逻辑 =================
