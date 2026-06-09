@@ -14,6 +14,10 @@ from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit a
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QBrush, QColor
 
+from tcp_manager import TCPManager
+from protocol import TDMProtocol
+from tdm_bias_widget import TDMBiasWidget
+
 # ================= 安全交互控件=================
 # 1. 下拉框：只屏蔽滚轮误触
 class QComboBox(_QComboBox):
@@ -824,147 +828,17 @@ class BiasBoardWidget(QWidget):
             
         return packets           
 
-class ConnectThread(QThread):
-    """
-    后台连接线程：专门负责去尝试连接Socket，防止主界面卡死
-    """
-    # 定义一个信号：当连接结束时，把结果发射出去
-    # 参数类型：(板卡类型(字符串), 是否成功(布尔值), 附带信息或Socket对象)
-    finished_signal = pyqtSignal(str, bool, object)
 
-    def __init__(self, board_type, ip, port=5000):
-        super().__init__()
-        self.board_type = board_type
-        self.ip = ip
-        self.port = port
-
-    def run(self):
-        """线程启动时会自动执行这里的代码"""
-        try:
-            # 创建 TCP Socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2.0)  # 强制 2 秒超时，连不上就报错，不死等
-            
-            # 尝试连接（这一步非常耗时，但因为它在后台，所以主界面不会卡）
-            sock.connect((self.ip, self.port))
-            
-            self.finished_signal.emit(self.board_type, True, sock)
-            
-        except Exception as e:
-            # 如果发生错误（超时、拒接等），发射失败信号和错误信息
-            self.finished_signal.emit(self.board_type, False, str(e))
-            
-class SendCommandThread(QThread):
-    """
-    后台通讯线程：专门负责发送指令并等待板卡回复，防止主界面在等待回复时卡死
-    """
-    # 信号：板卡类型, 是否成功, 收到回复的内容(或错误信息)
-    response_signal = pyqtSignal(str, bool, str)
-
-    def __init__(self, board_type, sock, command):
-        super().__init__()
-        self.board_type = board_type
-        self.sock = sock
-        self.command = command
-
-    def run(self):
-        try:
-
-            self.sock.sendall(self.command)
-            
-            # 2. 准备接收回复 (最多接收 1024 字节)
-            # 注意：如果板卡没回复，这里会一直等，直到触发我们之前设置的 2秒超时
-            response_bytes = self.sock.recv(1024)
-            
-            if response_bytes:
-                # 收到数据，解码并发送成功信号
-                response_str = response_bytes.decode('utf-8', errors='ignore').strip()
-                self.response_signal.emit(self.board_type, True, response_str)
-            else:
-                self.response_signal.emit(self.board_type, False, "板卡断开了连接 (收到空字节)")
-                
-        except socket.timeout:
-            self.response_signal.emit(self.board_type, False, "等待回复超时")
-        except Exception as e:
-            self.response_signal.emit(self.board_type, False, f"通讯异常: {str(e)}")            
- 
-class TDMProtocol:
-    '''16字节二进制通讯协议打包'''
-    CMD_WRITE = 0x01
-    
-    #板卡ID映射
-    BOARD_BIAS1 = 0x01
-    BOARD_BIAS2 = 0x02
-    BOARD_BIAS3 = 0x03
-    BOARD_FPGA = 0x07 
-    
-    #PARAM_ID映射
-    PARAM_ENABLE   = 0x01  # 通道开关 (0/1)
-    PARAM_TES_V    = 0x02  # TES偏置电压
-    PARAM_SA_IB    = 0x03  # SQUID 偏置电流 (μA)
-    PARAM_SA_PHIX  = 0x04  # SQUID 磁通偏置 (μA)
-    PARAM_VB       = 0x05  # VB 温度偏压
-    PARAM_IS_I     = 0x06  # IS 偏置电流 (μA)
-    PARAM_IS_PHIB  = 0x07  # IS 磁通偏置 (μA)
-    PARAM_AC_FREQ  = 0x10  # 交流频率
-    PARAM_AC_AMP   = 0x11  # 交流幅值
-    PARAM_WAVEFORM = 0x12  # 波形类型 (0=正弦 1=方波 2=三角)
-    PARAM_DC_VALUE = 0x13  # 直流幅值
-    PARAM_SIG_TYPE = 0x14  # 信号类型 (0=直流, 1=交流)
-    
-    #打包
-    @staticmethod
-    def calc_crc16(data: bytes) -> int:
-        """计算 CRC-16/CCITT False (多项式 0x1021，初始值 0xFFFF)"""
-        crc = 0xFFFF
-        for byte in data:
-            crc ^= (byte << 8)
-            for _ in range(8):
-                if crc & 0x8000:
-                    crc = (crc << 1) ^ 0x1021
-                else:
-                    crc = crc << 1
-                crc &= 0xFFFF
-        return crc
-    
-    @staticmethod
-    def pack_frame(cmd_type, board_id, param_id, channel_state, row_id, col_id, value, is_float=True) -> bytes:
-        # 0. 基础防御性检查：确保输入的 ID 在单字节范围内 (0~255)
-        row_id = int(row_id) & 0xFF
-        col_id = int(col_id) & 0xFF
-        channel_state = int(channel_state) & 0x01  # 看通道前面开关状态
-        board_id = int(board_id) & 0xFF
-        cmd_type = int(cmd_type) & 0xFF
-        param_id = int(param_id) & 0xFF
-        
-        if is_float:
-            frame_head = struct.pack('>BBBBBBBBfBB', 
-                                     0xAA, 0x55,        # 0~1: SYNC
-                                     cmd_type,          # 2: CMD_TYPE
-                                     board_id,          # 3: BOARD_ID
-                                     param_id,          # 4: PARAM_ID
-                                     channel_state,     # 5: CHANNEL_STATE
-                                     row_id,            # 6: ROW_ID
-                                     col_id,            # 7: COL_ID
-                                     float(value),      # 9~12: VALUE
-                                     0x00, 0x00)            # 13~14: RESERVED
-        else:
-            frame_head = struct.pack('>BBBBBBBBIBB', 
-                                     0xAA, 0x55, 
-                                     cmd_type, board_id, param_id, channel_state, row_id, col_id,
-                                     int(value), 0x00, 0x00)
-                                     
-        crc_val = TDMProtocol.calc_crc16(frame_head[2:])    #CRC校验Byte 2 到 Byte 14
-        final_frame = frame_head + struct.pack('>H', crc_val)
-        
-        return final_frame 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        # 【新增：网络相关的字典】
-        self.active_sockets = {}    # 存放连上的 socket 对象
-        self.connect_threads = {}   # 存放正在连接的后台线程，防止被 Python 垃圾回收
+        # 【新增：网络连接管理器】
+        self.tcp_manager = TCPManager()
+        self.tcp_manager.board_connected.connect(self.on_board_connected)
+        self.tcp_manager.board_disconnected.connect(self.on_board_disconnected)
+        self.tcp_manager.board_data_received.connect(self.on_board_data_received)
+        self.tcp_manager.board_probe_finished.connect(self.on_board_probe_finished)
         self.init_ui()
         
     def init_ui(self):
@@ -1043,9 +917,9 @@ class MainWindow(QMainWindow):
         connection_layout = QGridLayout()  # Create a vertical layout for the connection settings
         
         board_configs = [
-            ('偏置源板卡 1', 'Bias1',        '192.168.1.11'),
-            ('偏置源板卡 2', 'Bias2',        '192.168.1.12'),
-            ('偏置源板卡 3', 'Bias3',        '192.168.1.13'),
+            ('偏置源板卡1-TES Bias', 'Bias1',        '192.168.1.11'),
+            ('偏置源板卡2-IS Bias', 'Bias2',        '192.168.1.12'),
+            ('偏置源板卡3-SA Bias', 'Bias3',        '192.168.1.13'),
             ('ADC 读出板',   'ADC_readout',  '192.168.1.14'),
             ('FB DAC 板',    'FB_DAC',       '192.168.1.15'),
             ('选通 DAC 板',  'gate_DAC',     '192.168.1.16'),
@@ -1054,38 +928,57 @@ class MainWindow(QMainWindow):
         
         #准备空字典来存储输入框
         self.board_ip_edits = {}
+        self.board_port_edits = {}
+        self.board_local_ip_edits = {}
         self.board_connection_btns = {}
-        self.board_status_labels= {}
+        self.board_name_labels = {}
         
         widget.setLayout(layout)  # Set the layout for the connection tab
         self.tabs.addTab(widget, "板卡控制")  # Add the connection tab to the tab widget
         
         # 循环生成每一行的控件
         for i,(name, board_type, default_ip) in enumerate(board_configs): 
-            # first column: board name label
-            connection_layout.addWidget(QLabel(name), i, 0) 
+            # first column: board name label (used as status badge)
+            name_label = QLabel(f" {name} ")
+            name_label.setStyleSheet("background-color: #7F8C8D; color: white; font-weight: bold; padding: 4px; border-radius: 4px;")
+            name_label.setAlignment(Qt.AlignCenter)
+            self.board_name_labels[board_type] = name_label
+            connection_layout.addWidget(name_label, i, 0) 
             
             # second column: IP address input box
             ip_edit = QLineEdit(default_ip) 
-            ip_edit.setMinimumWidth(150) # set minimum width for better appearance
-            self.board_ip_edits[board_type] = ip_edit # store the input box in the dictionary for later use
+            ip_edit.setMinimumWidth(120) 
+            self.board_ip_edits[board_type] = ip_edit 
             connection_layout.addWidget(ip_edit, i, 1)
             
-            # third column: connection button
-            connect_btn = QPushButton("连接")
-            connect_btn.setMaximumWidth(80) # set maximum width for better appearance
+            # third column: Port input box
+            port_edit = QLineEdit("24")
+            port_edit.setMaximumWidth(60)
+            self.board_port_edits[board_type] = port_edit
+            connection_layout.addWidget(QLabel("Port:"), i, 2)
+            connection_layout.addWidget(port_edit, i, 3)
+
+            # fourth column: Local IP input box
+            local_ip_edit = QLineEdit("")
+            local_ip_edit.setMinimumWidth(120)
+            self.board_local_ip_edits[board_type] = local_ip_edit
+            connection_layout.addWidget(QLabel("Local IP:"), i, 4)
+            connection_layout.addWidget(local_ip_edit, i, 5)
+
+            # fifth column: connection button
+            connect_btn = QPushButton("Connect")
+            connect_btn.setMaximumWidth(80) 
 
             # 信号与槽连接
             connect_btn.clicked.connect(lambda checked, bt=board_type: self.connect_single_board(bt))
-            self.board_connection_btns[board_type] = connect_btn # store the button in the dictionary for later use
-            connection_layout.addWidget(connect_btn, i, 2)
+            self.board_connection_btns[board_type] = connect_btn 
+            connection_layout.addWidget(connect_btn, i, 6)
             
-            # fourth column: connection status label
-            status_label = QLabel("未连接")
-            status_label.setStyleSheet("color: red; font-weight: bold;") # set text color to red for "not connected" status   
-            status_label.setMidLineWidth(80) # set a fixed width for better appearance
-            self.board_status_labels[board_type] = status_label # store the label in the dictionary for later use
-            connection_layout.addWidget(status_label, i, 3)
+            # sixth column: probe button (shifted from 8th)
+            probe_btn = QPushButton("Test Link")
+            probe_btn.setMaximumWidth(80)
+            probe_btn.clicked.connect(lambda checked, bt=board_type: self.probe_single_board(bt))
+            connection_layout.addWidget(probe_btn, i, 7)
             
         connection_group.setLayout(connection_layout) # Set the layout for the connection group box
         layout.addWidget(connection_group) # Add the connection group box to the main layout of the
@@ -1093,7 +986,7 @@ class MainWindow(QMainWindow):
         #批量操作的按钮
         button_layout = QHBoxLayout() # 横向布局
         
-        self.connect_all_btn = QPushButton("连接所有板卡")
+        self.connect_all_btn = QPushButton("Connect All")
         self.connect_all_btn.setMinimumHeight(40)
         #绑定点击事件到函数
         self.connect_all_btn.clicked.connect(self.connect_all_boards)
@@ -1101,7 +994,7 @@ class MainWindow(QMainWindow):
         
         button_layout.setSpacing(60)
         
-        self.disconnect_all_btn = QPushButton("断开所有连接")
+        self.disconnect_all_btn = QPushButton("Disconnect All")
         self.disconnect_all_btn.setMinimumHeight(40)
         #绑定点击事件到断开按钮
         self.disconnect_all_btn.clicked.connect(self.disconnect_all_boards)
@@ -1120,56 +1013,75 @@ class MainWindow(QMainWindow):
         
         # ================= 1. 创建子标签页控件 =================
         self.bias_sub_tabs = QTabWidget()
-        # 优化标签页样式：加粗、加大字号、设置最小宽度防截断
         self.bias_sub_tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #C0C0C0; }
-            QTabBar::tab { 
-                padding: 8px 15px; 
-                font-size: 13px; 
-                font-weight: bold; 
-                min-width: 100px; 
+            QTabWidget::tab-bar { alignment: center; }
+            QTabWidget::pane { border: none; border-top: 1px solid #D0D0D0; margin-top: 5px; }
+            QTabBar::tab {
+                background: #FFFFFF;
+                border: 1px solid #C0C0C0;
+                padding: 6px 20px;
+                color: #333333;
+                font-size: 13px;
+                font-weight: bold;
             }
+            QTabBar::tab:first { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+            QTabBar::tab:last { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+            QTabBar::tab:!first { margin-left: -1px; }
             QTabBar::tab:selected {
-                background-color: #E8F0FE; /* 选中的标签变亮蓝色，更好看 */
-                color: #0055A4;
+                background: #007AFF;
+                color: white;
+                border-color: #007AFF;
             }
         """)
         
         # ================= 2. 将三块板卡加入子标签页 =================
-        # 原来需要我们自己手动创建堆叠布局，现在全部交给 sub_tabs 自动管理
         self.bias_boards = []
-        for i in range(3):
-            # 创建带滚动条的外壳（防止通道太多撑爆屏幕）
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setStyleSheet("QScrollArea { border: none; }")
+        
+        bias_board_configs = [
+            (0, "Bias1", "偏置源板卡1-TES Bias", "192.168.1.11"),
+            (1, "Bias2", "偏置源板卡2-IS Bias", "192.168.1.12"),
+            (2, "Bias3", "偏置源板卡3-SA Bias", "192.168.1.13")
+        ]
+        
+        for i, board_type, tab_name, default_ip in bias_board_configs:
+            # 实例化新的板卡界面
+            board_widget = TDMBiasWidget(board_type=board_type, board_name=tab_name, default_ip=default_ip)
             
-            # 实例化我们写好的板卡界面
-            board_widget = BiasBoardWidget(board_id=i)
+            # Connect signals to sync with main window
+            board_widget.sync_params_signal.connect(self.on_bias_sync_params)
+            board_widget.connect_clicked_signal.connect(self.connect_single_board)
+            board_widget.probe_clicked_signal.connect(self.probe_single_board)
+            board_widget.send_data_signal.connect(self.tcp_manager.send_data)
+            board_widget.log_signal.connect(self.log_from_bias)
+            
+            # Reverse sync: when main tab changes, update board_widget
+            ip_edit = self.board_ip_edits[board_type]
+            port_edit = self.board_port_edits[board_type]
+            local_ip_edit = self.board_local_ip_edits[board_type]
+            
+            ip_edit.textChanged.connect(lambda txt, bw=board_widget: bw.set_connection_params(txt, bw.txt_port.text(), bw.txt_local_ip.text()))
+            port_edit.textChanged.connect(lambda txt, bw=board_widget: bw.set_connection_params(bw.txt_ip.text(), txt, bw.txt_local_ip.text()))
+            local_ip_edit.textChanged.connect(lambda txt, bw=board_widget: bw.set_connection_params(bw.txt_ip.text(), bw.txt_port.text(), txt))
+            
             self.bias_boards.append(board_widget)
             
-            # 把板卡装进滚动条
-            scroll_area.setWidget(board_widget)
-            
-            # 把滚动条作为一个全新的标签页，加入到 sub_tabs 中
-            self.bias_sub_tabs.addTab(scroll_area, f"偏置源板卡 {i+1}")
+            self.bias_sub_tabs.addTab(board_widget, f"   {tab_name}   ")
             
         layout.addWidget(self.bias_sub_tabs)
         
         # ================= 3. 底部公共操作按钮 =================
-        # 这些按钮放在子标签页的外面，意味着不管切到哪个板卡，都能点这几个按钮
-        button_layout = QHBoxLayout()
-        self.read_bias_btn = QPushButton("读取参数")
-        self.write_bias_btn = QPushButton("写入参数")
-        self.write_bias_btn.clicked.connect(self.on_write_bias_clicked)
-        self.save_bias_btn = QPushButton("保存配置")
-        
-        button_layout.addWidget(self.read_bias_btn)
-        button_layout.addWidget(self.write_bias_btn)
-        button_layout.addWidget(self.save_bias_btn)
-        button_layout.addStretch()
-        
-        layout.addLayout(button_layout)
+        # 原有的读写保存按钮对于 TDM bias 可能不再需要，因为 TDM bias 界面每个 channel 有自己的 send 按钮。
+        # 如果需要保留，可以在这里添加。目前暂时隐藏或移除，以完全采用 TDM bias 的操作逻辑。
+        # button_layout = QHBoxLayout()
+        # self.read_bias_btn = QPushButton("读取参数")
+        # self.write_bias_btn = QPushButton("写入参数")
+        # self.write_bias_btn.clicked.connect(self.on_write_bias_clicked)
+        # self.save_bias_btn = QPushButton("保存配置")
+        # button_layout.addWidget(self.read_bias_btn)
+        # button_layout.addWidget(self.write_bias_btn)
+        # button_layout.addWidget(self.save_bias_btn)
+        # button_layout.addStretch()
+        # layout.addLayout(button_layout)
         
         widget.setLayout(layout)
         self.tabs.addTab(widget, "偏置源控制")
@@ -1256,9 +1168,24 @@ class MainWindow(QMainWindow):
         
         self.ad_da_sub_tabs = QTabWidget()
         self.ad_da_sub_tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #C0C0C0; }
-            QTabBar::tab { padding: 8px 15px; font-size: 13px; font-weight: bold; min-width: 100px; }
-            QTabBar::tab:selected { background-color: #E8F0FE; color: #0055A4; }
+            QTabWidget::tab-bar { alignment: center; }
+            QTabWidget::pane { border: none; border-top: 1px solid #D0D0D0; margin-top: 5px; }
+            QTabBar::tab {
+                background: #FFFFFF;
+                border: 1px solid #C0C0C0;
+                padding: 6px 20px;
+                color: #333333;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QTabBar::tab:first { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+            QTabBar::tab:last { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+            QTabBar::tab:!first { margin-left: -1px; }
+            QTabBar::tab:selected {
+                background: #007AFF;
+                color: white;
+                border-color: #007AFF;
+            }
         """)
         
         # ================= 子标签页 1：ADC & FB DAC (左右并排) =================
@@ -1290,7 +1217,7 @@ class MainWindow(QMainWindow):
         
         ad_fb_widget.setLayout(ad_fb_layout)
         ad_fb_scroll.setWidget(ad_fb_widget)
-        self.ad_da_sub_tabs.addTab(ad_fb_scroll, "ADC FB DAC控制")
+        self.ad_da_sub_tabs.addTab(ad_fb_scroll, "   ADC FB DAC控制   ")
         
         # ================= 子标签页 2：选通 DAC 板 =================
         gate_scroll = QScrollArea()
@@ -1303,7 +1230,7 @@ class MainWindow(QMainWindow):
         gate_layout.addStretch()
         gate_widget.setLayout(gate_layout)
         gate_scroll.setWidget(gate_widget)
-        self.ad_da_sub_tabs.addTab(gate_scroll, "选通 DAC 控制")
+        self.ad_da_sub_tabs.addTab(gate_scroll, "   选通 DAC 板   ")
         
         layout.addWidget(self.ad_da_sub_tabs)
         
@@ -1782,30 +1709,61 @@ class MainWindow(QMainWindow):
     #         adc_switch = QCheckBox()
     #         self.adc_switches.append(adc_switch)
     #         layout.addWidget(adc_switch, row, 1)
-            
-    #         adc_value = QDoubleSpinBox()
-    #         adc_value.setRange(-10, 10)
-    #         adc_value.setSuffix(" V")
-    #         adc_value.setDecimals(3) # 设置保留3位小数
-    #         self.adc_values.append(adc_value)
-    #         layout.addWidget(adc_value, row, 2)
-            
-    #         # Offset
-    #         offset_switch = QCheckBox()
-    #         self.adc_offset_switches.append(offset_switch)
-    #         layout.addWidget(offset_switch, row, 3)
-            
-    #         offset_value = QDoubleSpinBox()
-    #         offset_value.setRange(-10, 10)
-    #         offset_value.setSuffix(" V")
-    #         offset_value.setDecimals(3)
-    #         self.adc_offset_values.append(offset_value)
-    #         layout.addWidget(offset_value, row, 4)
-            
-    #     group.setLayout(layout)
-    #     parent_layout.addWidget(group)
+    def probe_single_board(self, board_type):
+        ip = self.board_ip_edits[board_type].text().strip()
+        port_str = self.board_port_edits[board_type].text().strip()
+        local_ip = self.board_local_ip_edits[board_type].text().strip()
+        port = int(port_str) if port_str.isdigit() else 24
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            msg = f"{board_type} Invalid IP Address: {ip}"
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+            QMessageBox.warning(self, "Test Link Failed", msg)
+            return
 
-    
+        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} Test Link started ({ip}:{port})... (5s)")
+        self.tcp_manager.probe_board(board_type, ip, port, 5.0, local_ip)
+
+    def connect_single_board(self, board_type):
+        """处理单个板卡的连接/断开点击"""
+        current_text = self.board_connection_btns[board_type].text()
+        
+        # 状态 1：明确要求【连接】
+        if current_text == "Connect":
+            ip = self.board_ip_edits[board_type].text().strip()
+            port_str = self.board_port_edits[board_type].text().strip()
+            local_ip = self.board_local_ip_edits[board_type].text().strip()
+            port = int(port_str) if port_str.isdigit() else 24
+            
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                msg = f"{board_type} 的 IP 地址格式无效: {ip}"
+                self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+                QMessageBox.warning(self, "连接失败", msg)
+                return
+
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 正在后台尝试连接 ({ip}:{port})...")
+            
+            self.board_name_labels[board_type].setStyleSheet("background-color: orange; color: white; font-weight: bold; padding: 4px; border-radius: 4px;")
+            self.board_connection_btns[board_type].setEnabled(False)
+            
+            # Propagate to bias boards if applicable
+            for bw in getattr(self, "bias_boards", []):
+                if bw.board_type == board_type:
+                    bw.set_badge_state("connecting")
+            
+            self.tcp_manager.connect_board(board_type, ip, port, local_ip)
+
+        # 状态 2：明确要求【断开】
+        elif current_text == "Disconnect":
+            self.tcp_manager.disconnect_board(board_type)
+            
+        # 状态 3：如果是连接中等其他状态，直接无视（防狂点）
+        else:
+            pass
+
     def setup_gate_dac_control(self, parent_layout):
         """选通DAC控制 (20行矩阵, 极致紧凑 + 竖线隔离 + 居左防拉伸)"""
         # --- 1. 顶部的参数设置区 ---
@@ -1924,101 +1882,106 @@ class MainWindow(QMainWindow):
         
         parent_layout.addLayout(wrapper)
         
-    def connect_single_board(self, board_type):
-        """处理单个板卡的连接/断开点击"""
-        current_text = self.board_connection_btns[board_type].text()
-        
-        # 状态 1：明确要求【连接】
-        if current_text == "连接":
-            ip = self.board_ip_edits[board_type].text().strip()
-            try:
-                ipaddress.ip_address(ip)
-            except ValueError:
-                msg = f"{board_type} 的 IP 地址格式无效: {ip}"
-                self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
-                QMessageBox.warning(self, "连接失败", msg)
-                return
+    def probe_single_board(self, board_type):
+        """探测单个板卡的网络链路状态"""
+        ip = self.board_ip_edits[board_type].text().strip()
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            msg = f"{board_type} Invalid IP Address: {ip}"
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+            QMessageBox.warning(self, "Test Link Failed", msg)
+            return
 
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 正在后台尝试连接 ({ip})...")
-            
-            self.board_status_labels[board_type].setText("连接中...")
-            self.board_status_labels[board_type].setStyleSheet("color: orange; font-weight: bold;")
-            self.board_connection_btns[board_type].setEnabled(False)
-            
-            thread = ConnectThread(board_type, ip)
-            thread.finished_signal.connect(self.on_connect_finished)
-            self.connect_threads[board_type] = thread
-            thread.start()
-            
-        # 状态 2：明确要求【断开】
-        elif current_text == "断开":
-            if board_type in self.active_sockets:
-                try:
-                    self.active_sockets[board_type].close()
-                except:
-                    pass
-                del self.active_sockets[board_type]
-                
-            self.board_status_labels[board_type].setText("未连接")
-            self.board_status_labels[board_type].setStyleSheet("color: red; font-weight: bold;")
-            self.board_connection_btns[board_type].setText("连接")
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接已断开")
-            
-        # 状态 3：如果是 "连接中..." 等其他状态，直接无视（防狂点）
-        else:
-            pass 
+        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} Test Link started ({ip})... (5s)")
+        self.tcp_manager.probe_board(board_type, ip, 24, 5.0)
 
     def connect_all_boards(self):
         """一键连接所有板卡 (严格判断状态)"""
         self.connection_log.append(f"\n[{time.strftime('%H:%M:%S')}] 开始尝试连接未连的板卡...")
         for board_type in self.board_ip_edits.keys():
             # 只有明确处于“连接”待机状态的按钮，才去触发
-            if self.board_connection_btns[board_type].text() == "连接":
+            if self.board_connection_btns[board_type].text() == "Connect":
                 self.connect_single_board(board_type)
 
     def disconnect_all_boards(self):
         """一键断开所有板卡 (严格判断状态)"""
         self.connection_log.append(f"\n[{time.strftime('%H:%M:%S')}] 开始断开已连的板卡...")
-        for board_type in self.board_ip_edits.keys():
-            # 只有明确处于“断开”待机状态的按钮，才去触发
-            if self.board_connection_btns[board_type].text() == "断开":
-                self.connect_single_board(board_type)
+        self.tcp_manager.disconnect_all()
 
-    def on_connect_finished(self, board_type, success, result):
-        """后台工人汇报结果的槽函数"""
-        # 恢复按钮的点击能力
+    def on_board_connected(self, board_type):
         self.board_connection_btns[board_type].setEnabled(True)
+        self.board_name_labels[board_type].setStyleSheet("background-color: #2ecc71; color: white; font-weight: bold; padding: 4px; border-radius: 4px;")
+        self.board_connection_btns[board_type].setText("Disconnect")
+        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接成功！")
         
-        if success:
-            # 成功,result 里面装的是那个做好的 socket 对象
-            self.active_sockets[board_type] = result
-            
-            self.board_status_labels[board_type].setText("已连接")
-            self.board_status_labels[board_type].setStyleSheet("color: green; font-weight: bold;")
-            self.board_connection_btns[board_type].setText("断开")
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接成功！")
+        # Propagate to bias boards if applicable
+        for bw in getattr(self, "bias_boards", []):
+            if bw.board_type == board_type:
+                bw.update_connection_state(True)
+
+    def on_board_disconnected(self, board_type, error_msg=""):
+        was_connecting = "orange" in self.board_name_labels[board_type].styleSheet()
+        
+        self.board_connection_btns[board_type].setEnabled(True)
+        self.board_name_labels[board_type].setStyleSheet("background-color: #7F8C8D; color: white; font-weight: bold; padding: 4px; border-radius: 4px;")
+        self.board_connection_btns[board_type].setText("Connect")
+        
+        # Propagate to bias boards if applicable
+        for bw in getattr(self, "bias_boards", []):
+            if bw.board_type == board_type:
+                bw.update_connection_state(False)
+        
+        reason = f" ({error_msg})" if error_msg else ""
+        if was_connecting:
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接失败{reason}")
+            # QMessageBox.warning(self, "连接失败", f"{board_type} 连接失败:\n{error_msg}")
         else:
-            # 失败,result 里面装的是错误原因的字符串
-            self.board_status_labels[board_type].setText("未连接")
-            self.board_status_labels[board_type].setStyleSheet("color: red; font-weight: bold;")
-            self.board_connection_btns[board_type].setText("连接")
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接失败: {result}")
-            QMessageBox.warning(self, "连接失败", f"{board_type} 连接失败:\n{result}")
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {board_type} 连接已断开{reason}")
+
+    def on_bias_sync_params(self, board_type, ip, port, local_ip):
+        if board_type in self.board_ip_edits:
+            # Update without triggering feedback loop
+            self.board_ip_edits[board_type].blockSignals(True)
+            self.board_port_edits[board_type].blockSignals(True)
+            self.board_local_ip_edits[board_type].blockSignals(True)
             
+            self.board_ip_edits[board_type].setText(ip)
+            self.board_port_edits[board_type].setText(port)
+            self.board_local_ip_edits[board_type].setText(local_ip)
+            
+            self.board_ip_edits[board_type].blockSignals(False)
+            self.board_port_edits[board_type].blockSignals(False)
+            self.board_local_ip_edits[board_type].blockSignals(False)
+
+    def log_from_bias(self, msg):
+        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {msg}")
+
+    def on_board_data_received(self, board_type, length, raw_data):
+        try:
+            # Try to decode as text (like TDM_V4 did for string responses)
+            response_str = raw_data.decode('utf-8', errors='strict').strip()
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] <- 收到 {board_type} 回复: {response_str}")
+        except UnicodeDecodeError:
+            # Fallback to Hex preview for binary frames
+            hex_preview = raw_data.hex().upper()
+            if len(hex_preview) > 40:
+                hex_preview = hex_preview[:40] + "..."
+            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] <- 收到 {board_type} 数据包: {length} 字节 [{hex_preview}]")
+
+    def on_board_probe_finished(self, board_type, success, msg):
+        status = "✅ Test Link Success" if success else "❌ Test Link Failed"
+        self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] {status}: {board_type} {msg}")
+
     def on_test_send_clicked(self):
         """点击测试发送按钮"""
         board_type = self.test_board_selector.currentText()
-        # command = self.test_cmd_input.text() # 原来的字符串发送不用了
         
-        if board_type not in self.active_sockets:
+        if not self.tcp_manager.is_connected(board_type):
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 错误: {board_type} 尚未连接！")
             return
             
-        sock = self.active_sockets[board_type]
-        
         # =================【模拟生成二进制指令】=================
-        # 假设我们要发送：向 Bias1 (0x01) 的 行0xFF(广播) 列0x05 发送电压 -1.25V
-        # 查表得知：CMD_WRITE=0x01, VOLTAGE=0x02
         test_frame = TDMProtocol.pack_frame(
             cmd_type=0x01, 
             board_id=0x01, 
@@ -2030,36 +1993,12 @@ class MainWindow(QMainWindow):
             is_float=True
         )
         
-        # 为了能在界面上直观看到底层真实发出的 16进制 是什么，我们把它转成字符串打印在日志里
         hex_str = ' '.join([f'{b:02X}' for b in test_frame])
         self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] -> 发送给 {board_type}:")
         self.connection_log.append(f"HEX: {hex_str}")
-        # ========================================================
-
-        self.test_send_btn.setEnabled(False)
-        self.test_send_btn.setText("等待回复...")
         
-        if not hasattr(self, 'comm_threads'):
-            self.comm_threads = {}
-            
-        # 注意这里把原来的 command 改成了 test_frame，并在 SendCommandThread 里记得去掉 .encode()
-        # 因为我们现在发的就是真正的 bytes 二进制了！
-        thread = SendCommandThread(board_type, sock, test_frame) 
-        thread.response_signal.connect(self.on_test_response_received)
-        self.comm_threads[board_type] = thread
-        thread.start()
-
-    def on_test_response_received(self, board_type, success, message):
-        """后台通讯线程结束后的回调"""
-        # 恢复按钮
-        self.test_send_btn.setEnabled(True)
-        self.test_send_btn.setText("发送并等待回复")
-        
-        if success:
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] <- 收到 {board_type} 回复: {message}")
-        else:
-            self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] ❌ {board_type} 通讯失败: {message}")
-            # 如果断开了，还可以顺手在界面上做清理，把灯变成红色（这里先省略）
+        # 纯异步发送，无需等待回复
+        self.tcp_manager.send_data(board_type, test_frame)
     
     def browse_storage_path(self):
         """浏览并选择存储路径"""
@@ -2080,18 +2019,16 @@ class MainWindow(QMainWindow):
         #获取当前选中的板卡索引
         current_index = self.bias_sub_tabs.currentIndex()
         current_board_widget = self.bias_boards[current_index]
-        #socket
         board_type = f"Bias{current_index+1}"
-        if board_type not in self.active_sockets:
+        if not self.tcp_manager.is_connected(board_type):
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 错误: {board_type} 尚未连接！")
             QMessageBox.warning(self, "警告", f"尚未连接 {board_type} 板卡！")
             return         
-        sock = self.active_sockets[board_type]
         
         try:
             packets = current_board_widget.generate_write_packets()
             for pkt in packets:
-                sock.sendall(pkt)
+                self.tcp_manager.send_data(board_type, pkt)
                 
             self.connection_log.append(f"[{time.strftime('%H:%M:%S')}] 已向 {board_type} 发送写入指令 ({len(packets)} 条)")           
         except Exception as e:
@@ -2245,7 +2182,29 @@ class MainWindow(QMainWindow):
 
 def main():
         app = QApplication(sys.argv)
-        app.setStyle('Fusion')  
+        # Use Fusion as base to ensure cross-platform geometry consistency
+        app.setStyle('Fusion')
+        
+        # Apply a global Modern Light Theme to force beautiful rounded corners
+        # and soft borders on all platforms, mimicking macOS aesthetics.
+        app.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #D0D0D0;
+                border-radius: 6px;
+                margin-top: 2ex;
+                padding-top: 10px;
+                background-color: #FAFAFA;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                left: 10px;
+                color: #4A4A4A;
+                font-weight: bold;
+            }
+        """)
+        
         window = MainWindow()
         window.show()
         sys.exit(app.exec_())
