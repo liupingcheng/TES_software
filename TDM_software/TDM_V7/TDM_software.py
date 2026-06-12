@@ -92,11 +92,19 @@ class QDoubleSpinBox(_QDoubleSpinBox):
     def wheelEvent(self, event):
         event.ignore()
 
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        # 点击单位区域时也能激活编辑：延迟全选数字部分
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self._original_value = self.value() # 记下修改前的值
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -251,11 +259,18 @@ class QSpinBox(_QSpinBox):
     def wheelEvent(self, event):
         event.ignore()
 
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self._original_value = self.value()
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -716,6 +731,8 @@ class SafeLineEdit(QLineEdit):
         super().focusInEvent(event)
         self._original_value = self.text()
         self.setStyleSheet("background-color: #FFFF99;")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -1031,9 +1048,9 @@ class MainWindow(QMainWindow):
         connection_layout = QGridLayout()  # 创建连接配置组垂直布局
         
         board_configs = [
-            ('偏置源板卡1-TES Bias', 'Bias1',        '192.168.1.11'),
-            ('偏置源板卡2-IS Bias', 'Bias2',        '192.168.1.12'),
-            ('偏置源板卡3-SA Bias', 'Bias3',        '192.168.1.13'),
+            ('偏置源板卡1-TES Bias', 'Bias1',        '192.168.10.16'),
+            ('偏置源板卡2-IS Bias', 'Bias2',        '192.168.10.16'),
+            ('偏置源板卡3-SA Bias', 'Bias3',        '192.168.10.16'),
             ('ADC 读出板',   'ADC_readout',  '192.168.1.14'),
             ('FB DAC 板',    'FB_DAC',       '192.168.1.15'),
             ('选通 DAC 板',  'gate_DAC',     '192.168.1.16'),
@@ -1073,7 +1090,7 @@ class MainWindow(QMainWindow):
             connection_layout.addWidget(port_edit, i, 3)
 
             # 第4列：本地 IP 输入框
-            local_ip_edit = QLineEdit("")
+            local_ip_edit = SafeLineEdit("192.168.10.100")
             local_ip_edit.setMinimumWidth(120)
             self.board_local_ip_edits[board_type] = local_ip_edit
             connection_layout.addWidget(QLabel("Local IP:"), i, 4)
@@ -1151,14 +1168,14 @@ class MainWindow(QMainWindow):
         self.bias_boards = []
         
         bias_board_configs = [
-            (0, "Bias1", "偏置源板卡1-TES Bias", "192.168.1.11"),
-            (1, "Bias2", "偏置源板卡2-IS Bias", "192.168.1.12"),
-            (2, "Bias3", "偏置源板卡3-SA Bias", "192.168.1.13")
+            (0, "Bias1", "偏置源板卡1-TES Bias", "192.168.10.16"),
+            (1, "Bias2", "偏置源板卡2-IS Bias", "192.168.10.16"),
+            (2, "Bias3", "偏置源板卡3-SA Bias", "192.168.10.16")
         ]
         
         for i, board_type, tab_name, default_ip in bias_board_configs:
             # 实例化新的板卡界面
-            board_widget = TDMBiasWidget(board_type=board_type, board_name=tab_name, default_ip=default_ip)
+            board_widget = TDMBiasWidget(board_type=board_type, board_name=tab_name, default_ip=default_ip, default_local_ip="192.168.10.100")
             
             # 绑定信号以与主窗口同步
             board_widget.sync_params_signal.connect(self.on_bias_sync_params)
@@ -1676,15 +1693,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "连接失败", msg)
                 return
 
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 正在后台尝试连接 ({ip}:{port})...")
-            
-            self.board_name_labels[board_type].setStyleSheet("background-color: orange; color: white; padding: 4px; border-radius: 4px;")
-            self.board_connection_btns[board_type].setEnabled(False)
-            
-            # Propagate to bias boards if applicable
-            for bw in getattr(self, "bias_boards", []):
-                if bw.board_type == board_type:
-                    bw.set_badge_state("connecting")
+            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 正在连接 ({ip}:{port})...")
             
             self.tcp_manager.connect_board(board_type, ip, port, local_ip)
 
@@ -1847,8 +1856,6 @@ class MainWindow(QMainWindow):
                 bw.update_connection_state(True)
 
     def on_board_disconnected(self, board_type, error_msg=""):
-        was_connecting = "orange" in self.board_name_labels[board_type].styleSheet()
-        
         self.board_connection_btns[board_type].setEnabled(True)
         self.board_name_labels[board_type].setStyleSheet("background-color: #7F8C8D; color: white; padding: 4px; border-radius: 4px;")
         self.board_connection_btns[board_type].setText("Connect")
@@ -1859,11 +1866,7 @@ class MainWindow(QMainWindow):
                 bw.update_connection_state(False)
         
         reason = f" ({error_msg})" if error_msg else ""
-        if was_connecting:
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接失败{reason}")
-            # QMessageBox.warning(self, "连接失败", f"{board_type} 连接失败:\n{error_msg}")
-        else:
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接已断开{reason}")
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接已断开{reason}")
 
     def on_bias_sync_params(self, board_type, ip, port, local_ip):
         if board_type in self.board_ip_edits:

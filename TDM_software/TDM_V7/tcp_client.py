@@ -22,31 +22,19 @@ class TCPClient(QObject):
         if self.is_connected:
             self.disconnect_from_server()
             
-        threading.Thread(target=self._connect_worker, args=(ip, port, local_ip), daemon=True).start()
-
-    def _connect_worker(self, ip, port, local_ip):
-        sock = None
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # 硬件控制的 Socket 优化
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-            
-            sock.settimeout(3.0)
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(3.0)
             if local_ip:
-                sock.bind((local_ip, 0))
-            sock.connect((ip, int(port)))
-            sock.settimeout(0.5)
-            
-            self.sock = sock
+                self.sock.bind((local_ip, 0))
+            self.sock.connect((ip, int(port)))
+            self.sock.settimeout(0.5)
             self.is_connected = True
             self._stop_event.clear()
             self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
             self._recv_thread.start()
             self.connected.emit()
         except Exception as e:
-            if sock:
-                sock.close()
             self.is_connected = False
             self.disconnected.emit(str(e))
             

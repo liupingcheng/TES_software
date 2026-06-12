@@ -17,11 +17,18 @@ class SafeDoubleSpinBox(_QDoubleSpinBox):
     def wheelEvent(self, event):
         event.ignore()
 
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
+
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self._original_value = self.value()
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
