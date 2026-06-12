@@ -748,8 +748,9 @@ class SafeLineEdit(QLineEdit):
             super().keyPressEvent(event)
             
     def focusOutEvent(self, event):
-        super().focusOutEvent(event)
+        self.setText(self._original_value)
         self.setStyleSheet("")
+        super().focusOutEvent(event)
 
 class MainWindow(QMainWindow):
     def __init__(self):

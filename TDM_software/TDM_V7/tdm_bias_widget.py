@@ -32,10 +32,9 @@ class SafeLineEdit(QLineEdit):
             super().keyPressEvent(event)
             
     def focusOutEvent(self, event):
-        super().focusOutEvent(event)
+        self.setText(self._original_value)
         self.setStyleSheet("")
-        # If we didn't press enter, revert value? Usually clicking away keeps the typed value unless we revert
-        # We will keep the typed value but it won't emit returnPressed
+        super().focusOutEvent(event)
 
 class TDMBiasWidget(QWidget):
     # 与主窗口同步的信号
