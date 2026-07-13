@@ -1,0 +1,21 @@
+set_property OUTPUT_VALUE 0 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out3 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out3} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+after 100
+set_property OUTPUT_VALUE 1 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out3 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out3} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+after 3000
+ 
+set_property OUTPUT_VALUE 1000000800000001 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+set_property OUTPUT_VALUE 1000000c00000000 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+set_property OUTPUT_VALUE 1000002000000007 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+set_property OUTPUT_VALUE 1000002400000007 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+set_property OUTPUT_VALUE 100000280000000F [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+set_property OUTPUT_VALUE 1000002c00000000 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+set_property OUTPUT_VALUE 1000000400000001 [get_hw_probes jesd204c_test_bd_i/control/vio_0_probe_out12 -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
+commit_hw_vio [get_hw_probes {jesd204c_test_bd_i/control/vio_0_probe_out12} -of_objects [get_hw_vios -of_objects [get_hw_devices xcku060_0] -filter {CELL_NAME=~"jesd204c_test_bd_i/control/vio_0"}]]
