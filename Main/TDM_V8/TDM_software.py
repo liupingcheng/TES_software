@@ -5,6 +5,7 @@ import sys
 import json
 import base64
 import datetime
+from pathlib import Path
 from PyQt5.QtWidgets import QFileDialog
 import time
 import socket
@@ -12,14 +13,15 @@ import ipaddress
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
                              QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView, QHeaderView, QStyle)
-from PyQt5.QtCore import Qt, QByteArray, QSettings, QThread, pyqtSignal, QEvent
-from PyQt5.QtGui import QFont, QBrush, QColor
+from PyQt5.QtCore import Qt, QByteArray, QSettings, QThread, pyqtSignal, QEvent, QUrl
+from PyQt5.QtGui import QFont, QBrush, QColor, QDesktopServices, QPalette
 
 from tcp_manager import TCPManager
 from protocol import TDMProtocol
 from tdm_bias_widget import TDMBiasWidget
 from fpga_widget import FPGAControlWidget
 from adda_widget import ADDAControlWidget
+from adda_config_sender import ADDAConfigSender
 
 # V8 偏置源板卡唯一的名称与默认网络配置。board_id 和 TCP 标识保持不变。
 BIAS_BOARD_CONFIGS = (
@@ -33,6 +35,70 @@ SESSION_CACHE_SCHEMA_VERSION = 1
 SESSION_CACHE_MIGRATIONS = {}
 SECTION_SCHEMA_VERSION = 1
 MAIN_PAGE_PROPERTY = "tdm_page_id"
+ADDA_CONFIG_DIRECTORY = Path(__file__).resolve().parent / "config_files"
+ADDA_CONFIG_FILE_NAMES = {
+    "adc": "adc_configuration.txt",
+    "dac": "dac39j84_0_1_2_configuration.txt",
+    "clock": "control_lmk_configuration.txt",
+    "jesd": "JESD_configuration.txt",
+}
+ADDA_CONFIG_ACTIONS = {
+    ("ADC_readout", "adc_registers"): ("adc", 4),
+    ("FB_DAC", "dac_registers"): ("dac", 4),
+    ("gate_DAC", "dac_registers"): ("dac", 4),
+    ("fpga", "clock_output"): ("clock", 4),
+    ("fpga", "jesd"): ("jesd", 8),
+}
+
+
+def build_fixed_light_palette():
+    """创建不跟随操作系统浅色/深色模式的应用调色板。"""
+    palette = QPalette()
+    colors = {
+        QPalette.Window: QColor("#F0F0F0"),
+        QPalette.WindowText: QColor("#202124"),
+        QPalette.Base: QColor("#FFFFFF"),
+        QPalette.AlternateBase: QColor("#F7F7F7"),
+        QPalette.ToolTipBase: QColor("#FFFDE7"),
+        QPalette.ToolTipText: QColor("#202124"),
+        QPalette.Text: QColor("#202124"),
+        QPalette.Button: QColor("#F2F2F2"),
+        QPalette.ButtonText: QColor("#202124"),
+        QPalette.BrightText: QColor("#FFFFFF"),
+        QPalette.Link: QColor("#1565C0"),
+        QPalette.LinkVisited: QColor("#6A1B9A"),
+        QPalette.Highlight: QColor("#2A82DA"),
+        QPalette.HighlightedText: QColor("#FFFFFF"),
+        QPalette.Light: QColor("#FFFFFF"),
+        QPalette.Midlight: QColor("#E3E3E3"),
+        QPalette.Mid: QColor("#B8B8B8"),
+        QPalette.Dark: QColor("#8A8A8A"),
+        QPalette.Shadow: QColor("#4A4A4A"),
+    }
+    for role, color in colors.items():
+        palette.setColor(QPalette.All, role, color)
+
+    disabled_color = QColor("#8A8A8A")
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        palette.setColor(QPalette.Disabled, role, disabled_color)
+    palette.setColor(QPalette.Disabled, QPalette.Base, QColor("#F3F3F3"))
+    palette.setColor(QPalette.Disabled, QPalette.Button, QColor("#E6E6E6"))
+    return palette
+
+
+def lock_macos_light_appearance():
+    """在 macOS 上将原生窗口标题栏也锁定为 Aqua 浅色外观。"""
+    if sys.platform != "darwin":
+        return False
+    try:
+        from AppKit import NSApplication, NSAppearance, NSAppearanceNameAqua
+
+        appearance = NSAppearance.appearanceNamed_(NSAppearanceNameAqua)
+        NSApplication.sharedApplication().setAppearance_(appearance)
+        return True
+    except (ImportError, RuntimeError):
+        # 无 PyObjC 时仍由 Qt 的固定浅色调色板保证内容区不变。
+        return False
 
 # ================= 安全交互控件=================
 # 1. 下拉框：只屏蔽滚轮误触
@@ -345,6 +411,13 @@ class MainWindow(QMainWindow):
         self.tcp_manager.board_disconnected.connect(self.on_board_disconnected)
         self.tcp_manager.board_data_received.connect(self.on_board_data_received)
         self.tcp_manager.board_probe_finished.connect(self.on_board_probe_finished)
+        self.adda_config_sender = ADDAConfigSender(
+            lambda board_type, data: self.tcp_manager.send_data(board_type, data),
+            self,
+        )
+        self.adda_config_sender.started.connect(self.on_adda_config_started)
+        self.adda_config_sender.progress.connect(self.on_adda_config_progress)
+        self.adda_config_sender.finished.connect(self.on_adda_config_finished)
         self.init_ui()
         self.restore_session_cache()
 
@@ -1070,6 +1143,9 @@ class MainWindow(QMainWindow):
         self.adda_widget.config_requested.connect(
             self.on_adda_config_requested
         )
+        self.adda_widget.config_file_requested.connect(
+            self.on_adda_config_file_requested
+        )
 
         for board_type in board_types:
             for editor in (
@@ -1435,6 +1511,10 @@ class MainWindow(QMainWindow):
         
         reason = f" ({error_msg})" if error_msg else ""
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接已断开{reason}")
+        self.adda_config_sender.cancel(
+            board_type,
+            error_msg or "板卡连接已断开",
+        )
 
     def on_bias_sync_params(self, board_type, ip, port, local_ip):
         self._update_connection_page_params(board_type, ip, port, local_ip)
@@ -1471,16 +1551,133 @@ class MainWindow(QMainWindow):
         board_name, action_name = self.adda_widget.action_description(
             board_type, action_id
         )
+        action_spec = ADDA_CONFIG_ACTIONS.get((board_type, action_id))
+        if action_spec is None:
+            self._report_adda_config_error(
+                f"{board_name} 的配置操作标识无效：{action_id}"
+            )
+            return
+        if not self.tcp_manager.is_connected(board_type):
+            self._report_adda_config_error(f"{board_name}未连接")
+            return
+
+        file_id, word_bytes = action_spec
+        file_name = ADDA_CONFIG_FILE_NAMES[file_id]
+        started, error_message = self.adda_config_sender.start(
+            board_type,
+            action_id,
+            ADDA_CONFIG_DIRECTORY / file_name,
+            word_bytes,
+            reply_bytes=4,
+        )
+        if not started:
+            self._report_adda_config_error(
+                f"{board_name} - {action_name}：{error_message}"
+            )
+
+    def on_adda_config_started(self, board_type, action_id, total):
+        board_name, action_name = self.adda_widget.action_description(
+            board_type, action_id
+        )
+        self.adda_widget.set_config_busy(
+            board_type,
+            action_id,
+            True,
+            completed=0,
+            total=total,
+        )
+        file_id, _ = ADDA_CONFIG_ACTIONS[(board_type, action_id)]
+        file_path = ADDA_CONFIG_DIRECTORY / ADDA_CONFIG_FILE_NAMES[file_id]
         self.connection_log.append(
             f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
             f"[时钟/AD/DA] {board_name} - {action_name}："
-            "功能待接入，本次未下发数据"
+            f"开始配置，共 {total} 条命令，文件 {file_path}"
         )
+
+    def on_adda_config_progress(
+        self,
+        board_type,
+        action_id,
+        completed,
+        total,
+    ):
+        self.adda_widget.update_config_progress(
+            board_type,
+            action_id,
+            completed,
+            total,
+        )
+
+    def on_adda_config_finished(
+        self,
+        board_type,
+        action_id,
+        success,
+        message,
+    ):
+        board_name, action_name = self.adda_widget.action_description(
+            board_type, action_id
+        )
+        self.adda_widget.set_config_busy(board_type, action_id, False)
+        status = "成功" if success else "失败"
+        self.connection_log.append(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"[时钟/AD/DA] {board_name} - {action_name}配置{status}："
+            f"{message}"
+        )
+        if not success:
+            QMessageBox.warning(self, "配置失败", message)
+
+    def _report_adda_config_error(self, message):
+        self.connection_log.append(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"[时钟/AD/DA] 配置失败：{message}"
+        )
+        QMessageBox.warning(self, "配置失败", message)
+
+    def on_adda_config_file_requested(self, board_type, file_id):
+        board_name, action_name = self.adda_widget.file_action_description(
+            board_type, file_id
+        )
+        file_name = ADDA_CONFIG_FILE_NAMES.get(file_id)
+        if file_name is None:
+            message = f"{board_name} 的配置文件标识无效：{file_id}"
+            self._report_adda_config_file_error(message)
+            return
+
+        file_path = ADDA_CONFIG_DIRECTORY / file_name
+        if not file_path.is_file():
+            message = f"{action_name}不存在：{file_path}"
+            self._report_adda_config_file_error(message)
+            return
+
+        file_url = QUrl.fromLocalFile(str(file_path))
+        if QDesktopServices.openUrl(file_url):
+            self.connection_log.append(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"[时钟/AD/DA] {board_name} - 已打开{action_name}：{file_path}"
+            )
+            return
+
+        self._report_adda_config_file_error(
+            f"系统无法打开{action_name}：{file_path}"
+        )
+
+    def _report_adda_config_file_error(self, message):
+        self.connection_log.append(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"[时钟/AD/DA] 配置文件错误：{message}"
+        )
+        QMessageBox.warning(self, "配置文件错误", message)
 
     def log_from_bias(self, msg):
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
     def on_board_data_received(self, board_type, length, raw_data):
+        raw_data = self.adda_config_sender.feed_received(board_type, raw_data)
+        if not raw_data:
+            return
+        length = len(raw_data)
         try:
             # Try to decode as text (like TDM_V4 did for string responses)
             response_str = raw_data.decode('utf-8', errors='strict').strip()
@@ -1772,6 +1969,8 @@ def main():
         
         # Use Fusion as base to ensure cross-platform geometry consistency
         app.setStyle('Fusion')
+        app.setPalette(build_fixed_light_palette())
+        lock_macos_light_appearance()
         
         # Apply a global Modern Light Theme to force beautiful rounded corners
         # and soft borders on all platforms, mimicking macOS aesthetics.

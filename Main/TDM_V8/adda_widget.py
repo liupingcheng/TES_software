@@ -19,24 +19,28 @@ from PyQt5.QtWidgets import (
 
 MODULE_SPECS = (
     (
-        "fpga",
-        "FPGA算法板卡",
-        (("clock_output", "时钟输出配置"), ("jesd", "JESD 配置")),
-    ),
-    (
         "ADC_readout",
         "DFB ADC板卡",
         (("adc_registers", "ADC板卡寄存器配置"),),
+        (("adc", "ADC 配置文件"),),
     ),
     (
         "FB_DAC",
         "DFB DAC板卡",
         (("dac_registers", "DAC板卡寄存器配置"),),
+        (("dac", "DAC 配置文件"),),
     ),
     (
         "gate_DAC",
         "选通 DAC板卡",
         (("dac_registers", "DAC板卡寄存器配置"),),
+        (("dac", "DAC 配置文件"),),
+    ),
+    (
+        "fpga",
+        "FPGA算法板卡",
+        (("clock_output", "时钟输出配置"), ("jesd", "JESD 配置")),
+        (("clock", "时钟配置文件"), ("jesd", "JESD 配置文件")),
     ),
 )
 
@@ -80,12 +84,14 @@ class BoardModuleCard(QGroupBox):
     connect_requested = pyqtSignal(str)
     probe_requested = pyqtSignal(str)
     config_requested = pyqtSignal(str, str)
+    config_file_requested = pyqtSignal(str, str)
 
     def __init__(
         self,
         board_type,
         board_name,
         actions,
+        file_actions,
         ip="",
         port="24",
         local_ip="",
@@ -114,7 +120,9 @@ class BoardModuleCard(QGroupBox):
         self.board_type = board_type
         self.board_name = board_name
         self.action_labels = dict(actions)
+        self.file_action_labels = dict(file_actions)
         self.config_buttons = {}
+        self.config_file_buttons = {}
 
         self.setMinimumHeight(124)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -163,6 +171,19 @@ class BoardModuleCard(QGroupBox):
 
         connection_layout.addStretch(1)
 
+        for file_id, label in file_actions:
+            button = QPushButton(label)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setMinimumWidth(112)
+            button.setFont(network_font)
+            button.clicked.connect(
+                lambda checked=False, fid=file_id: self.config_file_requested.emit(
+                    self.board_type, fid
+                )
+            )
+            self.config_file_buttons[file_id] = button
+            connection_layout.addWidget(button)
+
         for network_widget in (
             ip_label,
             self.ip_edit,
@@ -192,7 +213,7 @@ class BoardModuleCard(QGroupBox):
             button.setMinimumHeight(34)
             button.setMinimumWidth(222 if len(actions) == 1 else 168)
             button_font = QFont(content_font)
-            button_font.setBold(True)
+            button_font.setBold(False)
             button.setFont(button_font)
             button.clicked.connect(
                 lambda checked=False, aid=action_id: self.config_requested.emit(
@@ -264,6 +285,20 @@ class BoardModuleCard(QGroupBox):
         self.status_label.setPalette(status_palette)
         self._position_status_label()
 
+    def set_config_busy(self, action_id, busy, completed=0, total=0):
+        for current_id, button in self.config_buttons.items():
+            button.setEnabled(not busy)
+            button.setText(self.action_labels[current_id])
+        if busy and action_id in self.config_buttons:
+            self.config_buttons[action_id].setText(
+                f"配置中 {int(completed)}/{int(total)}"
+            )
+
+    def update_config_progress(self, action_id, completed, total):
+        button = self.config_buttons.get(action_id)
+        if button is not None:
+            button.setText(f"配置中 {int(completed)}/{int(total)}")
+
 
 class ADDAControlWidget(QWidget):
     """Four-board clock/AD/DA configuration entry page."""
@@ -272,6 +307,7 @@ class ADDAControlWidget(QWidget):
     connect_requested = pyqtSignal(str)
     probe_requested = pyqtSignal(str)
     config_requested = pyqtSignal(str, str)
+    config_file_requested = pyqtSignal(str, str)
 
     def __init__(self, network_params=None, parent=None):
         super().__init__(parent)
@@ -282,12 +318,13 @@ class ADDAControlWidget(QWidget):
         page_layout.setContentsMargins(8, 8, 8, 8)
         page_layout.setSpacing(8)
 
-        for board_type, board_name, actions in MODULE_SPECS:
+        for board_type, board_name, actions, file_actions in MODULE_SPECS:
             ip, port, local_ip = network_params.get(board_type, ("", "24", ""))
             card = BoardModuleCard(
                 board_type,
                 board_name,
                 actions,
+                file_actions,
                 ip,
                 port,
                 local_ip,
@@ -299,6 +336,7 @@ class ADDAControlWidget(QWidget):
             card.connect_requested.connect(self.connect_requested.emit)
             card.probe_requested.connect(self.probe_requested.emit)
             card.config_requested.connect(self.config_requested.emit)
+            card.config_file_requested.connect(self.config_file_requested.emit)
             self.module_cards[board_type] = card
             page_layout.addWidget(card)
 
@@ -314,8 +352,31 @@ class ADDAControlWidget(QWidget):
         if card is not None:
             card.update_connection_state(is_connected)
 
+    def set_config_busy(
+        self,
+        board_type,
+        action_id,
+        busy,
+        completed=0,
+        total=0,
+    ):
+        card = self.module_cards.get(board_type)
+        if card is not None:
+            card.set_config_busy(action_id, busy, completed, total)
+
+    def update_config_progress(self, board_type, action_id, completed, total):
+        card = self.module_cards.get(board_type)
+        if card is not None:
+            card.update_config_progress(action_id, completed, total)
+
     def action_description(self, board_type, action_id):
         card = self.module_cards.get(board_type)
         if card is None:
             return board_type, action_id
         return card.board_name, card.action_labels.get(action_id, action_id)
+
+    def file_action_description(self, board_type, file_id):
+        card = self.module_cards.get(board_type)
+        if card is None:
+            return board_type, file_id
+        return card.board_name, card.file_action_labels.get(file_id, file_id)
