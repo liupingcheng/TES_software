@@ -3,6 +3,7 @@
 #V7 增加参数存储，日志保存
 import sys
 import json
+import base64
 import datetime
 from PyQt5.QtWidgets import QFileDialog
 import time
@@ -11,7 +12,7 @@ import ipaddress
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
                              QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView, QHeaderView)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QEvent
+from PyQt5.QtCore import Qt, QByteArray, QSettings, QThread, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QBrush, QColor
 
 from tcp_manager import TCPManager
@@ -26,6 +27,12 @@ BIAS_BOARD_CONFIGS = (
     (1, "Bias2", "偏置源板卡2-SA Bias", "192.168.102.1", "192.168.102.2"),
     (2, "Bias3", "偏置源板卡3-TES Bias", "192.168.103.1", "192.168.103.2"),
 )
+
+SESSION_CACHE_KEY = "session/auto_cache"
+SESSION_CACHE_SCHEMA_VERSION = 1
+SESSION_CACHE_MIGRATIONS = {}
+SECTION_SCHEMA_VERSION = 1
+MAIN_PAGE_PROPERTY = "tdm_page_id"
 
 # ================= 安全交互控件=================
 # 1. 下拉框：只屏蔽滚轮误触
@@ -329,8 +336,9 @@ class SafeLineEdit(QLineEdit):
         super().focusOutEvent(event)
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, settings=None):
         super().__init__()
+        self.settings = settings if settings is not None else QSettings("TES", "TDMSoftware")
         # 【新增：网络连接管理器】
         self.tcp_manager = TCPManager()
         self.tcp_manager.board_connected.connect(self.on_board_connected)
@@ -338,8 +346,336 @@ class MainWindow(QMainWindow):
         self.tcp_manager.board_data_received.connect(self.on_board_data_received)
         self.tcp_manager.board_probe_finished.connect(self.on_board_probe_finished)
         self.init_ui()
-        
-    
+        self.restore_session_cache()
+
+    def _add_main_tab(self, page_id, widget, title):
+        """用稳定业务 ID 注册主页面，不依赖标签顺序。"""
+        if page_id in self.main_pages:
+            raise ValueError(f"重复的主页面 ID: {page_id}")
+        widget.setProperty(MAIN_PAGE_PROPERTY, page_id)
+        self.main_pages[page_id] = widget
+        self.tabs.addTab(widget, title)
+
+    def _current_main_page_id(self):
+        widget = self.tabs.currentWidget()
+        if widget is None:
+            return None
+        page_id = widget.property(MAIN_PAGE_PROPERTY)
+        return page_id if isinstance(page_id, str) else None
+
+    def _set_current_main_page(self, page_id):
+        widget = self.main_pages.get(page_id)
+        if widget is None:
+            return False
+        index = self.tabs.indexOf(widget)
+        if index < 0:
+            return False
+        self.tabs.setCurrentIndex(index)
+        return True
+
+    def _cache_log(self, message):
+        if hasattr(self, "connection_log"):
+            self.connection_log.append(f"[缓存] {message}")
+
+    @staticmethod
+    def _validated_section(section, section_name):
+        if not isinstance(section, dict):
+            raise ValueError(f"{section_name} 不是对象")
+        version = section.get("schema_version", SECTION_SCHEMA_VERSION)
+        if isinstance(version, bool) or version != SECTION_SCHEMA_VERSION:
+            raise ValueError(
+                f"{section_name} 版本 {version} 不受支持，"
+                f"期望 {SECTION_SCHEMA_VERSION}"
+            )
+        return section
+
+    def _migrate_session_cache(self, payload):
+        """集中处理根缓存版本迁移，新版本只需增加迁移函数。"""
+        if not isinstance(payload, dict):
+            raise ValueError("根缓存不是对象")
+        version = payload.get("schema_version")
+        if not isinstance(version, int) or isinstance(version, bool):
+            raise ValueError("缺少有效的 schema_version")
+        if version > SESSION_CACHE_SCHEMA_VERSION:
+            raise ValueError(
+                f"缓存版本 {version} 高于当前支持的 "
+                f"{SESSION_CACHE_SCHEMA_VERSION}"
+            )
+
+        migrated = payload
+        while version < SESSION_CACHE_SCHEMA_VERSION:
+            migration = SESSION_CACHE_MIGRATIONS.get(version)
+            if migration is None:
+                raise ValueError(f"缺少从缓存版本 {version} 开始的迁移规则")
+            migrated = migration(migrated)
+            next_version = migrated.get("schema_version") if isinstance(migrated, dict) else None
+            if not isinstance(next_version, int) or next_version <= version:
+                raise ValueError(f"缓存版本 {version} 的迁移结果无效")
+            version = next_version
+        return migrated
+
+    def _collect_ui_cache(self):
+        current_bias = self.bias_sub_tabs.currentWidget()
+        bias_board_id = getattr(current_bias, "board_type", None)
+        bias_dac_pages = {}
+        for board in self.bias_boards:
+            chip = board.tabs.currentWidget()
+            chip_id = getattr(chip, "chip_id", None)
+            if chip_id is not None:
+                bias_dac_pages[board.board_type] = chip_id
+
+        geometry = base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
+        return {
+            "schema_version": SECTION_SCHEMA_VERSION,
+            "window_geometry": geometry,
+            "main_page": self._current_main_page_id(),
+            "bias_board": bias_board_id,
+            "bias_dac_pages": bias_dac_pages,
+        }
+
+    def collect_session_cache(self):
+        return {
+            "schema_version": SESSION_CACHE_SCHEMA_VERSION,
+            "connections": {
+                "schema_version": SECTION_SCHEMA_VERSION,
+                "boards": {
+                    board_type: {
+                        "ip": self.board_ip_edits[board_type].text(),
+                        "port": self.board_port_edits[board_type].text(),
+                        "local_ip": self.board_local_ip_edits[board_type].text(),
+                    }
+                    for board_type in self.board_ip_edits
+                },
+            },
+            "bias": {
+                "schema_version": SECTION_SCHEMA_VERSION,
+                "boards": {
+                    board.board_type: board.get_board_config()
+                    for board in self.bias_boards
+                },
+            },
+            "fpga": self.get_fpga_config(),
+            "storage": {
+                "schema_version": SECTION_SCHEMA_VERSION,
+                "path": self.storage_path.text(),
+                "format": self.storage_format.currentIndex(),
+                "prefix": self.file_prefix.text(),
+                "interval": self.save_interval.value(),
+            },
+            "ui": self._collect_ui_cache(),
+        }
+
+    def save_session_cache(self):
+        """保存一个完整 JSON 快照；序列化失败时不覆盖上次缓存。"""
+        focus_widget = QApplication.focusWidget()
+        if focus_widget is not None and (
+            focus_widget is self or self.isAncestorOf(focus_widget)
+        ):
+            focus_widget.clearFocus()
+
+        try:
+            serialized = json.dumps(
+                self.collect_session_cache(),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        except Exception as exc:
+            self._cache_log(f"自动保存失败：{exc}")
+            return False
+
+        self.settings.setValue(SESSION_CACHE_KEY, serialized)
+        self.settings.sync()
+        if self.settings.status() != QSettings.NoError:
+            self._cache_log("自动保存失败：设置存储后端写入异常")
+            return False
+        return True
+
+    def _restore_connections_cache(self, section):
+        section = self._validated_section(section, "connections")
+        boards = section.get("boards", {})
+        if not isinstance(boards, dict):
+            raise ValueError("connections.boards 不是对象")
+
+        parsed = {}
+        field_names = ("ip", "port", "local_ip")
+        for board_type, values in boards.items():
+            if board_type not in self.board_ip_edits:
+                continue
+            if not isinstance(values, dict):
+                raise ValueError(f"{board_type} 网络参数不是对象")
+            parsed_values = {}
+            for field_name in field_names:
+                if field_name not in values:
+                    continue
+                value = values[field_name]
+                if not isinstance(value, str):
+                    raise ValueError(f"{board_type}.{field_name} 不是字符串")
+                parsed_values[field_name] = value
+            parsed[board_type] = parsed_values
+
+        for board_type, values in parsed.items():
+            if "ip" in values:
+                self.board_ip_edits[board_type].setText(values["ip"])
+            if "port" in values:
+                self.board_port_edits[board_type].setText(values["port"])
+            if "local_ip" in values:
+                self.board_local_ip_edits[board_type].setText(values["local_ip"])
+
+        for board in self.bias_boards:
+            board.set_connection_params(
+                self.board_ip_edits[board.board_type].text(),
+                self.board_port_edits[board.board_type].text(),
+                self.board_local_ip_edits[board.board_type].text(),
+            )
+
+    @staticmethod
+    def _merge_known_cache_fields(defaults, cached):
+        """补全新字段并忽略已删除字段，保持旧缓存可用。"""
+        if isinstance(defaults, dict) and isinstance(cached, dict):
+            return {
+                key: MainWindow._merge_known_cache_fields(value, cached[key])
+                if key in cached
+                else value
+                for key, value in defaults.items()
+            }
+        return cached
+
+    def _restore_bias_cache(self, section):
+        section = self._validated_section(section, "bias")
+        boards = section.get("boards", {})
+        if not isinstance(boards, dict):
+            raise ValueError("bias.boards 不是对象")
+
+        for board in self.bias_boards:
+            data = boards.get(board.board_type)
+            if data is None:
+                continue
+            try:
+                if not isinstance(data, dict):
+                    raise ValueError("板卡参数不是对象")
+                merged = self._merge_known_cache_fields(board.get_board_config(), data)
+                success, message = board.set_board_config(merged)
+                if not success:
+                    raise ValueError(message)
+            except Exception as exc:
+                self._cache_log(f"{board.board_type} 参数恢复失败：{exc}")
+
+    def _restore_fpga_cache(self, data):
+        if not isinstance(data, dict):
+            raise ValueError("fpga 不是对象")
+        merged = self._merge_known_cache_fields(self.get_fpga_config(), data)
+        success, message = self.set_fpga_config(merged)
+        if not success:
+            raise ValueError(message)
+
+    def _restore_storage_cache(self, section):
+        section = self._validated_section(section, "storage")
+        parsed = {}
+        if "path" in section:
+            if not isinstance(section["path"], str):
+                raise ValueError("storage.path 不是字符串")
+            parsed["path"] = section["path"]
+        if "prefix" in section:
+            if not isinstance(section["prefix"], str):
+                raise ValueError("storage.prefix 不是字符串")
+            parsed["prefix"] = section["prefix"]
+        if "format" in section:
+            format_index = section["format"]
+            if (
+                not isinstance(format_index, int)
+                or isinstance(format_index, bool)
+                or not 0 <= format_index < self.storage_format.count()
+            ):
+                raise ValueError("storage.format 超出可用范围")
+            parsed["format"] = format_index
+        if "interval" in section:
+            interval = section["interval"]
+            if (
+                not isinstance(interval, int)
+                or isinstance(interval, bool)
+                or not self.save_interval.minimum() <= interval <= self.save_interval.maximum()
+            ):
+                raise ValueError("storage.interval 超出可用范围")
+            parsed["interval"] = interval
+
+        if "path" in parsed:
+            self.storage_path.setText(parsed["path"])
+        if "prefix" in parsed:
+            self.file_prefix.setText(parsed["prefix"])
+        if "format" in parsed:
+            self.storage_format.setCurrentIndex(parsed["format"])
+        if "interval" in parsed:
+            self.save_interval.setValue(parsed["interval"])
+
+    def _restore_ui_cache(self, section):
+        section = self._validated_section(section, "ui")
+        geometry = section.get("window_geometry")
+        if isinstance(geometry, str):
+            try:
+                decoded = base64.b64decode(geometry.encode("ascii"), validate=True)
+                if not self.restoreGeometry(QByteArray(decoded)):
+                    raise ValueError("窗口几何信息不可用")
+            except Exception as exc:
+                self._cache_log(f"窗口位置恢复失败：{exc}")
+
+        dac_pages = section.get("bias_dac_pages", {})
+        if isinstance(dac_pages, dict):
+            for board in self.bias_boards:
+                chip_id = dac_pages.get(board.board_type)
+                for index, chip in enumerate(board.chip_widgets):
+                    if chip.chip_id == chip_id:
+                        board.tabs.setCurrentIndex(index)
+                        break
+
+        bias_board_id = section.get("bias_board")
+        for index, board in enumerate(self.bias_boards):
+            if board.board_type == bias_board_id:
+                self.bias_sub_tabs.setCurrentIndex(index)
+                break
+
+        main_page = section.get("main_page")
+        if isinstance(main_page, str):
+            self._set_current_main_page(main_page)
+
+    def restore_session_cache(self):
+        raw_value = self.settings.value(SESSION_CACHE_KEY)
+        if raw_value in (None, ""):
+            return False
+        if not isinstance(raw_value, str):
+            self._cache_log("自动缓存读取失败：存储内容不是 JSON 字符串")
+            return False
+
+        try:
+            payload = self._migrate_session_cache(json.loads(raw_value))
+        except Exception as exc:
+            self._cache_log(f"自动缓存读取失败：{exc}")
+            return False
+
+        restorers = (
+            ("connections", self._restore_connections_cache),
+            ("bias", self._restore_bias_cache),
+            ("fpga", self._restore_fpga_cache),
+            ("storage", self._restore_storage_cache),
+            ("ui", self._restore_ui_cache),
+        )
+        restored_any = False
+        for section_name, restore in restorers:
+            if section_name not in payload:
+                continue
+            try:
+                restore(payload[section_name])
+                restored_any = True
+            except Exception as exc:
+                self._cache_log(f"{section_name} 恢复失败：{exc}")
+
+        if restored_any:
+            self._cache_log("已自动恢复上次关闭时的设置")
+        return restored_any
+
+    def closeEvent(self, event):
+        self.save_session_cache()
+        super().closeEvent(event)
+
     def get_fpga_config(self):
         return self.fpga_widget.get_config()
 
@@ -360,19 +696,19 @@ class MainWindow(QMainWindow):
                 self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 保存日志失败: {str(e)}")
 
     def save_current_page_config(self):
-        tab_idx = self.tabs.currentIndex()
+        page_id = self._current_main_page_id()
         data = None
         default_name = ""
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M")
         
-        if tab_idx == 1:
+        if page_id == "bias":
             bias_board = self.bias_sub_tabs.currentWidget()
             if bias_board:
                 data = bias_board.get_board_config()
                 if data:
                     ip = data['board_ip'].replace('.', '_')
                     default_name = f"Bias_{ip}_{ts}.json"
-        elif tab_idx == 3:
+        elif page_id == "fpga":
             data = self.get_fpga_config()
             default_name = f"FPGA_Config_{ts}.json"
             
@@ -390,8 +726,8 @@ class MainWindow(QMainWindow):
                 self.connection_log.append(f"[系统] 保存失败: {str(e)}")
 
     def load_current_page_config(self):
-        tab_idx = self.tabs.currentIndex()
-        if tab_idx in (0, 2, 4):
+        page_id = self._current_main_page_id()
+        if page_id not in ("bias", "fpga"):
             self.connection_log.append("[系统] 当前页面不支持读取参数！")
             return
             
@@ -404,11 +740,11 @@ class MainWindow(QMainWindow):
                 
             success = False
             msg = ""
-            if tab_idx == 1:
+            if page_id == "bias":
                 bias_board = self.bias_sub_tabs.currentWidget()
                 if bias_board:
                     success, msg = bias_board.set_board_config(data)
-            elif tab_idx == 3:
+            elif page_id == "fpga":
                 success, msg = self.set_fpga_config(data)
                 
             if success:
@@ -429,6 +765,7 @@ class MainWindow(QMainWindow):
         
         # ================= 1. 上半部分：选项卡控件 =================
         self.tabs = QTabWidget()
+        self.main_pages = {}
         
         # 使用纯 Python 方式安全地放大主标签字体，相对缩放避免破坏 Mac 原生字体度量
         main_tab_font = self.tabs.tabBar().font()
@@ -533,10 +870,10 @@ class MainWindow(QMainWindow):
             (name, board_type, default_ip, default_local_ip)
             for _, board_type, name, default_ip, default_local_ip in BIAS_BOARD_CONFIGS
         ] + [
-            ('ADC 读出板',   'ADC_readout',  '192.168.104.1', '192.168.104.2'),
-            ('FB DAC 板',    'FB_DAC',       '192.168.105.1', '192.168.105.2'),
-            ('选通 DAC 板',  'gate_DAC',     '192.168.106.1', '192.168.106.2'),
-            ('FPGA 汇总板',  'fpga',         '192.168.200.1', '192.168.200.2'),
+            ('DFB ADC板卡',   'ADC_readout',  '192.168.104.1', '192.168.104.2'),
+            ('DFB DAC板卡',   'FB_DAC',       '192.168.105.1', '192.168.105.2'),
+            ('选通 DAC板卡',    'gate_DAC',     '192.168.106.1', '192.168.106.2'),
+            ('FPGA算法板卡',    'fpga',         '192.168.200.1', '192.168.200.2'),
         ]
         
         #准备空字典来存储输入框
@@ -547,7 +884,6 @@ class MainWindow(QMainWindow):
         self.board_name_labels = {}
         
         widget.setLayout(layout)  # 设置连接配置页布局
-        self.tabs.addTab(widget, "板卡控制")  # 添加连接配置页到选项卡
         
         # 循环生成每一行的控件
         for i, (name, board_type, default_ip, default_local_ip) in enumerate(board_configs):
@@ -558,40 +894,43 @@ class MainWindow(QMainWindow):
             self.board_name_labels[board_type] = name_label
             connection_layout.addWidget(name_label, i, 0) 
             
-            # 第2列：IP 地址输入框
+            # 第2列：IP 地址标签
+            connection_layout.addWidget(QLabel("IP Address:"), i, 1)
+
+            # 第3列：IP 地址输入框
             ip_edit = SafeLineEdit(default_ip) 
             ip_edit.setMinimumWidth(120) 
             self.board_ip_edits[board_type] = ip_edit 
-            connection_layout.addWidget(ip_edit, i, 1)
+            connection_layout.addWidget(ip_edit, i, 2)
             
-            # 第3列：端口输入框
+            # 第4列：端口输入框
             port_edit = SafeLineEdit("24")
             port_edit.setMaximumWidth(60)
             self.board_port_edits[board_type] = port_edit
-            connection_layout.addWidget(QLabel("Port:"), i, 2)
-            connection_layout.addWidget(port_edit, i, 3)
+            connection_layout.addWidget(QLabel("Port:"), i, 3)
+            connection_layout.addWidget(port_edit, i, 4)
 
-            # 第4列：本地 IP 输入框
+            # 第5列：本地 IP 输入框
             local_ip_edit = SafeLineEdit(default_local_ip)
             local_ip_edit.setMinimumWidth(120)
             self.board_local_ip_edits[board_type] = local_ip_edit
-            connection_layout.addWidget(QLabel("Local IP:"), i, 4)
-            connection_layout.addWidget(local_ip_edit, i, 5)
+            connection_layout.addWidget(QLabel("Local IP:"), i, 5)
+            connection_layout.addWidget(local_ip_edit, i, 6)
 
-            # 第5列：连接按钮
+            # 第6列：连接按钮
             connect_btn = QPushButton("Connect")
             connect_btn.setMaximumWidth(80) 
 
             # 信号与槽连接
             connect_btn.clicked.connect(lambda checked, bt=board_type: self.connect_single_board(bt))
             self.board_connection_btns[board_type] = connect_btn 
-            connection_layout.addWidget(connect_btn, i, 6)
+            connection_layout.addWidget(connect_btn, i, 7)
             
-            # 第6列：探测按钮
+            # 第7列：探测按钮
             probe_btn = QPushButton("Test Link")
             probe_btn.setMaximumWidth(80)
             probe_btn.clicked.connect(lambda checked, bt=board_type: self.probe_single_board(bt))
-            connection_layout.addWidget(probe_btn, i, 7)
+            connection_layout.addWidget(probe_btn, i, 8)
             
         connection_group.setLayout(connection_layout) # 设置连接配置组布局
         layout.addWidget(connection_group) # 将连接配置组添加到主布局
@@ -617,7 +956,7 @@ class MainWindow(QMainWindow):
 
         layout.addStretch() 
         widget.setLayout(layout)
-        self.tabs.addTab(widget, "板卡连接")
+        self._add_main_tab("connection", widget, "板卡连接")
         
     def setup_bias_control_tab(self):
         """偏置源控制选项卡 (采用子标签页方案)"""
@@ -686,19 +1025,19 @@ class MainWindow(QMainWindow):
         # layout.addLayout(button_layout)
         
         widget.setLayout(layout)
-        self.tabs.addTab(widget, "偏置源控制")
+        self._add_main_tab("bias", widget, "偏置源控制")
    
     def setup_ad_da_tab(self):
-        """装配独立的 AD/DA 控制页。"""
+        """装配独立的时钟/AD/DA 配置页。"""
         self.adda_widget = ADDAControlWidget(self)
-        self.tabs.addTab(self.adda_widget, "AD/DA控制")
+        self._add_main_tab("adda", self.adda_widget, "时钟/AD/DA配置")
 
     def setup_fpga_tab(self):
         """FPGA数据汇总选项卡 (顶部双拼布局 + 底部大表格)"""
         self.fpga_widget = FPGAControlWidget(self)
         self.fpga_widget.log_signal.connect(self.log_from_fpga_ui)
         self.fpga_widget.dfb_state_changed.connect(self.on_fpga_dfb_ui_changed)
-        self.tabs.addTab(self.fpga_widget, "FPGA控制")
+        self._add_main_tab("fpga", self.fpga_widget, "FPGA控制")
         return
 
         widget = QWidget()
@@ -1159,7 +1498,7 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(storage_group)
         main_layout.addStretch()
-        self.tabs.addTab(widget, "数据存储")
+        self._add_main_tab("storage", widget, "数据存储")
 
     def log_from_fpga_ui(self, msg):
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")

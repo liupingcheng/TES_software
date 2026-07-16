@@ -1,10 +1,10 @@
-"""Empty AD/DA control page, reserved for a new implementation."""
+"""Empty clock/AD/DA configuration page, reserved for a new implementation."""
 
 from PyQt5.QtWidgets import QWidget
 
 
 class ADDAControlWidget(QWidget):
-    """Blank container for the AD/DA control page."""
+    """Blank container for the clock/AD/DA configuration page."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
