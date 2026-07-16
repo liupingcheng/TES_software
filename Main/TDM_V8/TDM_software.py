@@ -11,7 +11,7 @@ import socket
 import ipaddress
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
                              QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
-                             QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView, QHeaderView)
+                             QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView, QHeaderView, QStyle)
 from PyQt5.QtCore import Qt, QByteArray, QSettings, QThread, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QBrush, QColor
 
@@ -528,6 +528,10 @@ class MainWindow(QMainWindow):
                 self.board_local_ip_edits[board.board_type].text(),
             )
 
+        if hasattr(self, "adda_widget"):
+            for board_type in self.adda_widget.module_cards:
+                self._sync_adda_from_connection_page(board_type)
+
     @staticmethod
     def _merge_known_cache_fields(defaults, cached):
         """补全新字段并忽略已删除字段，保持旧缓存可用。"""
@@ -865,6 +869,10 @@ class MainWindow(QMainWindow):
         
         connection_group = QGroupBox("Connection Settings")  # 创建连接配置组
         connection_layout = QGridLayout()  # 创建连接配置组垂直布局
+        native_vertical_spacing = connection_group.style().pixelMetric(
+            QStyle.PM_LayoutVerticalSpacing
+        )
+        native_vertical_spacing = max(0, native_vertical_spacing)
         
         board_configs = [
             (name, board_type, default_ip, default_local_ip)
@@ -931,6 +939,22 @@ class MainWindow(QMainWindow):
             probe_btn.setMaximumWidth(80)
             probe_btn.clicked.connect(lambda checked, bt=board_type: self.probe_single_board(bt))
             connection_layout.addWidget(probe_btn, i, 8)
+
+            row_widgets = (
+                name_label,
+                ip_edit,
+                port_edit,
+                local_ip_edit,
+                connect_btn,
+                probe_btn,
+            )
+            native_row_height = max(item.sizeHint().height() for item in row_widgets)
+            target_row_pitch = round(
+                (native_row_height + native_vertical_spacing) * 1.25
+            )
+            connection_layout.setRowMinimumHeight(
+                i, target_row_pitch - native_vertical_spacing
+            )
             
         connection_group.setLayout(connection_layout) # 设置连接配置组布局
         layout.addWidget(connection_group) # 将连接配置组添加到主布局
@@ -953,8 +977,7 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.disconnect_all_btn)
         
         layout.addLayout(button_layout)
-
-        layout.addStretch() 
+        layout.addStretch()
         widget.setLayout(layout)
         self._add_main_tab("connection", widget, "板卡连接")
         
@@ -1029,7 +1052,35 @@ class MainWindow(QMainWindow):
    
     def setup_ad_da_tab(self):
         """装配独立的时钟/AD/DA 配置页。"""
-        self.adda_widget = ADDAControlWidget(self)
+        board_types = ("fpga", "ADC_readout", "FB_DAC", "gate_DAC")
+        network_params = {
+            board_type: (
+                self.board_ip_edits[board_type].text(),
+                self.board_port_edits[board_type].text(),
+                self.board_local_ip_edits[board_type].text(),
+            )
+            for board_type in board_types
+        }
+        self.adda_widget = ADDAControlWidget(network_params, self)
+        self.adda_widget.connection_params_changed.connect(
+            self.on_adda_sync_params
+        )
+        self.adda_widget.connect_requested.connect(self.connect_single_board)
+        self.adda_widget.probe_requested.connect(self.probe_single_board)
+        self.adda_widget.config_requested.connect(
+            self.on_adda_config_requested
+        )
+
+        for board_type in board_types:
+            for editor in (
+                self.board_ip_edits[board_type],
+                self.board_port_edits[board_type],
+                self.board_local_ip_edits[board_type],
+            ):
+                editor.returnPressed.connect(
+                    lambda bt=board_type: self._sync_adda_from_connection_page(bt)
+                )
+
         self._add_main_tab("adda", self.adda_widget, "时钟/AD/DA配置")
 
     def setup_fpga_tab(self):
@@ -1360,6 +1411,9 @@ class MainWindow(QMainWindow):
         self.board_name_labels[board_type].setStyleSheet("background-color: #2ecc71; color: white; padding: 4px; border-radius: 4px;")
         self.board_connection_btns[board_type].setText("Disconnect")
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接成功！")
+
+        if hasattr(self, "adda_widget"):
+            self.adda_widget.update_connection_state(board_type, True)
         
         # Propagate to bias boards if applicable
         for bw in getattr(self, "bias_boards", []):
@@ -1370,6 +1424,9 @@ class MainWindow(QMainWindow):
         self.board_connection_btns[board_type].setEnabled(True)
         self.board_name_labels[board_type].setStyleSheet("background-color: #7F8C8D; color: white; padding: 4px; border-radius: 4px;")
         self.board_connection_btns[board_type].setText("Connect")
+
+        if hasattr(self, "adda_widget"):
+            self.adda_widget.update_connection_state(board_type, False)
         
         # Propagate to bias boards if applicable
         for bw in getattr(self, "bias_boards", []):
@@ -1380,6 +1437,12 @@ class MainWindow(QMainWindow):
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 连接已断开{reason}")
 
     def on_bias_sync_params(self, board_type, ip, port, local_ip):
+        self._update_connection_page_params(board_type, ip, port, local_ip)
+
+    def on_adda_sync_params(self, board_type, ip, port, local_ip):
+        self._update_connection_page_params(board_type, ip, port, local_ip)
+
+    def _update_connection_page_params(self, board_type, ip, port, local_ip):
         if board_type in self.board_ip_edits:
             # Update without triggering feedback loop
             self.board_ip_edits[board_type].blockSignals(True)
@@ -1393,6 +1456,26 @@ class MainWindow(QMainWindow):
             self.board_ip_edits[board_type].blockSignals(False)
             self.board_port_edits[board_type].blockSignals(False)
             self.board_local_ip_edits[board_type].blockSignals(False)
+
+    def _sync_adda_from_connection_page(self, board_type):
+        if not hasattr(self, "adda_widget") or board_type not in self.board_ip_edits:
+            return
+        self.adda_widget.set_connection_params(
+            board_type,
+            self.board_ip_edits[board_type].text().strip(),
+            self.board_port_edits[board_type].text().strip(),
+            self.board_local_ip_edits[board_type].text().strip(),
+        )
+
+    def on_adda_config_requested(self, board_type, action_id):
+        board_name, action_name = self.adda_widget.action_description(
+            board_type, action_id
+        )
+        self.connection_log.append(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"[时钟/AD/DA] {board_name} - {action_name}："
+            "功能待接入，本次未下发数据"
+        )
 
     def log_from_bias(self, msg):
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
