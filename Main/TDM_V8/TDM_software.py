@@ -20,11 +20,11 @@ from tdm_bias_widget import TDMBiasWidget
 from fpga_widget import FPGAControlWidget
 from adda_widget import ADDAControlWidget
 
-# V8 偏置源板卡唯一的显示名称映射。board_id、TCP 标识和默认 IP 保持不变。
+# V8 偏置源板卡唯一的名称与默认网络配置。board_id 和 TCP 标识保持不变。
 BIAS_BOARD_CONFIGS = (
-    (0, "Bias1", "偏置源板卡1-IS Bias", "192.168.10.16"),
-    (1, "Bias2", "偏置源板卡2-SA Bias", "192.168.10.16"),
-    (2, "Bias3", "偏置源板卡3-TES Bias", "192.168.10.16"),
+    (0, "Bias1", "偏置源板卡1-IS Bias", "192.168.101.1", "192.168.101.2"),
+    (1, "Bias2", "偏置源板卡2-SA Bias", "192.168.102.1", "192.168.102.2"),
+    (2, "Bias3", "偏置源板卡3-TES Bias", "192.168.103.1", "192.168.103.2"),
 )
 
 # ================= 安全交互控件=================
@@ -530,13 +530,13 @@ class MainWindow(QMainWindow):
         connection_layout = QGridLayout()  # 创建连接配置组垂直布局
         
         board_configs = [
-            (name, board_type, default_ip)
-            for _, board_type, name, default_ip in BIAS_BOARD_CONFIGS
+            (name, board_type, default_ip, default_local_ip)
+            for _, board_type, name, default_ip, default_local_ip in BIAS_BOARD_CONFIGS
         ] + [
-            ('ADC 读出板',   'ADC_readout',  '192.168.1.14'),
-            ('FB DAC 板',    'FB_DAC',       '192.168.1.15'),
-            ('选通 DAC 板',  'gate_DAC',     '192.168.1.16'),
-            ('FPGA 汇总板',  'fpga',         '192.168.1.10'),
+            ('ADC 读出板',   'ADC_readout',  '192.168.104.1', '192.168.104.2'),
+            ('FB DAC 板',    'FB_DAC',       '192.168.105.1', '192.168.105.2'),
+            ('选通 DAC 板',  'gate_DAC',     '192.168.106.1', '192.168.106.2'),
+            ('FPGA 汇总板',  'fpga',         '192.168.200.1', '192.168.200.2'),
         ]
         
         #准备空字典来存储输入框
@@ -550,7 +550,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(widget, "板卡控制")  # 添加连接配置页到选项卡
         
         # 循环生成每一行的控件
-        for i,(name, board_type, default_ip) in enumerate(board_configs): 
+        for i, (name, board_type, default_ip, default_local_ip) in enumerate(board_configs):
             # 第1列：板卡名称标签（用作状态指示）
             name_label = QLabel(f" {name} ")
             name_label.setStyleSheet("background-color: #7F8C8D; color: white; padding: 4px; border-radius: 4px;")
@@ -572,7 +572,7 @@ class MainWindow(QMainWindow):
             connection_layout.addWidget(port_edit, i, 3)
 
             # 第4列：本地 IP 输入框
-            local_ip_edit = SafeLineEdit("192.168.10.100")
+            local_ip_edit = SafeLineEdit(default_local_ip)
             local_ip_edit.setMinimumWidth(120)
             self.board_local_ip_edits[board_type] = local_ip_edit
             connection_layout.addWidget(QLabel("Local IP:"), i, 4)
@@ -649,9 +649,14 @@ class MainWindow(QMainWindow):
         # ================= 2. 将三块板卡加入子标签页 =================
         self.bias_boards = []
         
-        for i, board_type, tab_name, default_ip in BIAS_BOARD_CONFIGS:
+        for i, board_type, tab_name, default_ip, default_local_ip in BIAS_BOARD_CONFIGS:
             # 实例化新的板卡界面
-            board_widget = TDMBiasWidget(board_type=board_type, board_name=tab_name, default_ip=default_ip, default_local_ip="192.168.10.100")
+            board_widget = TDMBiasWidget(
+                board_type=board_type,
+                board_name=tab_name,
+                default_ip=default_ip,
+                default_local_ip=default_local_ip,
+            )
             
             # 绑定信号以与主窗口同步
             board_widget.sync_params_signal.connect(self.on_bias_sync_params)
