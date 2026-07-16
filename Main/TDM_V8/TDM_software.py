@@ -7,10 +7,9 @@ import datetime
 from PyQt5.QtWidgets import QFileDialog
 import time
 import socket
-import struct
 import ipaddress
 from PyQt5.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLineEdit as _QLineEdit, QMainWindow, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget,
-                             QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QScrollArea, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
+                             QTabWidget, QGroupBox, QComboBox as _QComboBox, QDoubleSpinBox as _QDoubleSpinBox, QCheckBox, QSpinBox as _QSpinBox, QTableWidget, QFileDialog,
                              QMessageBox, QFrame, QTableWidgetItem, QAbstractItemView, QHeaderView)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QBrush, QColor
@@ -18,6 +17,15 @@ from PyQt5.QtGui import QFont, QBrush, QColor
 from tcp_manager import TCPManager
 from protocol import TDMProtocol
 from tdm_bias_widget import TDMBiasWidget
+from fpga_widget import FPGAControlWidget
+from adda_widget import ADDAControlWidget
+
+# V8 偏置源板卡唯一的显示名称映射。board_id、TCP 标识和默认 IP 保持不变。
+BIAS_BOARD_CONFIGS = (
+    (0, "Bias1", "偏置源板卡1-IS Bias", "192.168.10.16"),
+    (1, "Bias2", "偏置源板卡2-SA Bias", "192.168.10.16"),
+    (2, "Bias3", "偏置源板卡3-TES Bias", "192.168.10.16"),
+)
 
 # ================= 安全交互控件=================
 # 1. 下拉框：只屏蔽滚轮误触
@@ -290,438 +298,6 @@ class QSpinBox(_QSpinBox):
             self._is_editing = False
         super().focusOutEvent(event)
 
-class BiasBoardWidget(QWidget):
-    """独立的偏置源板卡控件"""
-    def __init__(self, board_id, parent=None):
-        super().__init__(parent)
-        self.board_id = board_id
-        self.init_ui()
-        
-    def init_ui(self):
-        layout = QVBoxLayout()
-        
-        # ================= 1. 信号类型切换 =================
-        ac_dc_group = QGroupBox("信号类型")
-        ac_dc_layout = QHBoxLayout()
-        self.signal_type = QComboBox()
-        self.signal_type.addItems(["直流", "交流"])
-        ac_dc_layout.addWidget(QLabel("信号类型:"))
-        ac_dc_layout.addWidget(self.signal_type)
-        ac_dc_layout.addStretch()
-        ac_dc_group.setLayout(ac_dc_layout)
-        layout.addWidget(ac_dc_group)
-        
-        # ================= 2. 交流参数设置 =================
-        self.ac_params_group = QGroupBox("交流信号参数")
-        ac_layout = QGridLayout()
-        
-        ac_layout.addWidget(QLabel("波形类型:"), 0, 0)
-        self.waveform_type = QComboBox()
-        self.waveform_type.addItems(["正弦波", "三角波", "方波"])
-        ac_layout.addWidget(self.waveform_type, 0, 1)
-        
-        ac_layout.addWidget(QLabel("频率:"), 1, 0)
-        self.frequency = QDoubleSpinBox()
-        self.frequency.setRange(0.1, 10000)
-        self.frequency.setValue(1000)
-        self.frequency.setSuffix(" Hz")
-        ac_layout.addWidget(self.frequency, 1, 1)
-        
-        ac_layout.addWidget(QLabel("幅值:"), 2, 0)
-        self.amplitude = QDoubleSpinBox()
-        self.amplitude.setRange(0, 1000)
-        self.amplitude.setValue(10)
-        self.amplitude.setSuffix(" μA")
-        ac_layout.addWidget(self.amplitude, 2, 1)
-        
-        self.ac_params_group.setLayout(ac_layout)
-        layout.addWidget(self.ac_params_group)
-        
-        # ================= 3. 直流参数设置 =================
-        self.dc_params_group = QGroupBox("直流信号参数")
-        dc_layout = QHBoxLayout()
-        dc_layout.addWidget(QLabel("直流电流:"))
-        self.dc_value = QDoubleSpinBox()
-        self.dc_value.setRange(-1000, 1000)
-        self.dc_value.setValue(0)
-        self.dc_value.setSuffix(" μA")
-        dc_layout.addWidget(self.dc_value)
-        dc_layout.addStretch()
-        self.dc_params_group.setLayout(dc_layout)
-        layout.addWidget(self.dc_params_group)
-        
-        # 必须先将上述基础组件设置为整个窗口的 Layout
-        self.setLayout(layout)
-        
-        # ================= 4. 根据板卡ID动态加载底部矩阵 =================
-        if self.board_id == 0:
-            self.setup_board1_channels()
-        elif self.board_id == 1:
-            self.setup_board2_channels()
-        else:
-            self.setup_board3_channels()
-            
-        # 加上弹性空间，把上面的组件全都往上顶
-        self.layout().addStretch()
-        
-        # ================= 5. 【极其关键】绑定事件并强制触发一次 =================
-        self.signal_type.currentTextChanged.connect(self.on_signal_type_changed)
-        # 这一句必须在所有 UI 都构建完毕之后执行，强制根据当前的文字（"直流"）进行一波显示/隐藏！
-        self.on_signal_type_changed(self.signal_type.currentText())
-        
-    def on_signal_type_changed(self, signal_type):
-        """信号类型切换时，动态显示/隐藏相关参数"""
-        if signal_type == "交流":
-            self.ac_params_group.show()
-            self.dc_params_group.hide()
-            
-            # 如果是板卡1，且方波组已经成功创建，则显示它
-            if self.board_id == 0 and hasattr(self, 'square_wave_group'):
-                self.square_wave_group.show()
-        else:
-            # 直流模式下：隐藏交流参数，显示直流参数
-            self.ac_params_group.hide()
-            self.dc_params_group.show()
-            
-            # 如果是板卡1，隐藏方波组
-            if self.board_id == 0 and hasattr(self, 'square_wave_group'):
-                self.square_wave_group.hide()
-
-    def setup_board1_channels(self):
-        """设置第一块板卡 (Board 0) 的通道控制"""
-        # ================= 1. TES 信号控制区 =================
-        group = QGroupBox("TES信号控制 (16列)")
-        layout = QGridLayout()
-        
-        self.tes_master_switch = QCheckBox("TES 总开关")
-        self.tes_master_switch.stateChanged.connect(self.toggle_all_tes)
-        layout.addWidget(self.tes_master_switch, 0, 0, 1, 8)
-        
-        self.tes_switches = []
-        self.tes_values = []
-        for i in range(16):
-            switch = QCheckBox(f"列{i+1}")
-            self.tes_switches.append(switch)
-            row = i // 4 + 1
-            col = (i % 4) * 2
-            layout.addWidget(switch, row, col)
-            
-            value = QDoubleSpinBox()
-            value.setRange(-10, 10)
-            value.setSuffix(" V")
-            self.tes_values.append(value)
-            layout.addWidget(value, row, col + 1)
-        group.setLayout(layout)
-        self.layout().addWidget(group)
-        
-        # ================= 2. 独立方波信号控制区 =================
-        self.square_wave_group = QGroupBox("独立方波信号控制 (16列)")
-        sq_layout = QGridLayout()
-        
-        # 顶部方波参数
-        sq_layout.addWidget(QLabel("方波幅值:"), 0, 0)
-        self.square_amplitude = QDoubleSpinBox()
-        self.square_amplitude.setRange(0, 1000)
-        self.square_amplitude.setValue(5)
-        self.square_amplitude.setSuffix(" μA")
-        sq_layout.addWidget(self.square_amplitude, 0, 1)
-        
-        sq_layout.addWidget(QLabel("方波频率:"), 0, 2)
-        self.square_frequency = QDoubleSpinBox()
-        self.square_frequency.setRange(0.1, 10000)
-        self.square_frequency.setValue(100)
-        self.square_frequency.setSuffix(" Hz")
-        sq_layout.addWidget(self.square_frequency, 0, 3)
-        
-        # 方波总开关
-        self.square_master_switch = QCheckBox("方波信号 总开关")
-        self.square_master_switch.stateChanged.connect(self.toggle_all_square)
-        sq_layout.addWidget(self.square_master_switch, 1, 0, 1, 8)
-        
-        self.square_switches = []
-        self.square_values = []
-        for i in range(16):
-            switch = QCheckBox(f"列{i+1}")
-            self.square_switches.append(switch)
-            row = i // 4 + 2  # 从第2行开始（0行是参数，1行是总开关）
-            col = (i % 4) * 2
-            sq_layout.addWidget(switch, row, col)
-            
-            value = QDoubleSpinBox()
-            value.setRange(-1000, 1000)
-            value.setSuffix(" μA")
-            self.square_values.append(value)
-            sq_layout.addWidget(value, row, col + 1)
-            
-        self.square_wave_group.setLayout(sq_layout)
-        self.layout().addWidget(self.square_wave_group)
-        
-        # 初始时根据下拉框状态决定是否显示
-        self.on_signal_type_changed(self.signal_type.currentText())
-
-    def toggle_all_tes(self, state):
-        checked = (state == 2)
-        for switch in self.tes_switches:
-            switch.setChecked(checked)
-            
-    def toggle_all_square(self, state):
-        """联动方法：方波总开关"""
-        checked = (state == 2)
-        for switch in self.square_switches:
-            switch.setChecked(checked)
-    
-        # ========================== 板卡 2 ==========================
-    def setup_board2_channels(self):
-        """设置第二块板卡的通道控制 (紧凑型左右布局 + 分割线)"""
-        main_h_layout = QHBoxLayout()
-        
-        # ================= 左侧模块: SA Ib & SA phix =================
-        group1 = QGroupBox("SA Ib & SA phix控制 (16列)")
-        layout1 = QGridLayout()
-        layout1.setHorizontalSpacing(15) # 设置列与列之间的固定小间距
-        
-        self.sa_ib_master_switch = QCheckBox("SA Ib 总开关")
-        self.sa_ib_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.sa_ib_switches])
-        layout1.addWidget(self.sa_ib_master_switch, 0, 1, 1, 2)
-        
-        self.sa_phix_master_switch = QCheckBox("SA phix 总开关")
-        self.sa_phix_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.sa_phix_switches])
-        # 注意：因为中间插了分割线，所以 phix 的位置往后挪了一列，到了第 4 列
-        layout1.addWidget(self.sa_phix_master_switch, 0, 4, 1, 2)
-        
-        # 表头 (注意索引 3 留空给分割线)
-        layout1.addWidget(QLabel("列"), 1, 0)
-        layout1.addWidget(QLabel("SA Ib 开关"), 1, 1)
-        layout1.addWidget(QLabel("SA Ib 输出值"), 1, 2)
-        # 索引 3 是空的，用来放竖线
-        layout1.addWidget(QLabel("SA phix 开关"), 1, 4)
-        layout1.addWidget(QLabel("SA phix 输出值"), 1, 5)
-        
-        # 【画一条贯穿上下的竖线作为视觉隔离】
-        vline = QFrame()            
-        vline.setFrameShape(QFrame.VLine)
-        vline.setFrameShadow(QFrame.Sunken)
-        vline.setStyleSheet("color: #CCCCCC;") # 淡淡的灰色
-        # 把它放在第 1 行到第 17 行的第 3 列 (跨越17行，占用1列)
-        layout1.addWidget(vline, 1, 3, 17, 1)
-        
-        self.sa_ib_switches, self.sa_ib_values = [], []
-        self.sa_phix_switches, self.sa_phix_values = [], []
-        
-        for i in range(16):
-            row = i + 2
-            layout1.addWidget(QLabel(f" {i+1} "), row, 0)
-            
-            # --- Ib 部分 ---
-            ib_switch = QCheckBox()
-            self.sa_ib_switches.append(ib_switch)
-            layout1.addWidget(ib_switch, row, 1)
-            
-            ib_value = QDoubleSpinBox()
-            ib_value.setRange(-1000, 1000)
-            ib_value.setSuffix(" μA")
-            self.sa_ib_values.append(ib_value)
-            layout1.addWidget(ib_value, row, 2)
-            
-            # --- phix 部分 ---
-            phix_switch = QCheckBox()
-            self.sa_phix_switches.append(phix_switch)
-            layout1.addWidget(phix_switch, row, 4) # 放到第 4 列
-            
-            phix_value = QDoubleSpinBox()
-            phix_value.setRange(-1000, 1000)
-            phix_value.setSuffix(" μA")
-            self.sa_phix_values.append(phix_value)
-            layout1.addWidget(phix_value, row, 5) # 放到第 5 列
-            
-        # 【关键招式】：在最右侧（第 6 列）加一个弹簧，把所有控件狠狠往左挤！
-        layout1.setColumnStretch(6, 1)
-        
-        group1.setLayout(layout1)
-        main_h_layout.addWidget(group1, stretch=2) # 左侧组比较大，占 2 份宽度
-        
-        
-        # ================= 右侧模块: Vb控制 =================
-        group2 = QGroupBox("Vb控制 (16列)")
-        layout2 = QGridLayout()
-        layout2.setHorizontalSpacing(15)
-        
-        self.vb_master_switch = QCheckBox("Vb 总开关")
-        self.vb_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.vb_switches])
-        layout2.addWidget(self.vb_master_switch, 0, 1, 1, 2)
-        
-        layout2.addWidget(QLabel("列"), 1, 0)
-        layout2.addWidget(QLabel("开关"), 1, 1)
-        layout2.addWidget(QLabel("输出值"), 1, 2)
-        
-        self.vb_switches, self.vb_values = [], []
-        for i in range(16):
-            row = i + 2
-            layout2.addWidget(QLabel(f" {i+1} "), row, 0)
-            
-            switch = QCheckBox()
-            self.vb_switches.append(switch)
-            layout2.addWidget(switch, row, 1)
-            
-            value = QDoubleSpinBox()
-            value.setRange(-10, 10)
-            value.setSuffix(" V")
-            self.vb_values.append(value)
-            layout2.addWidget(value, row, 2)
-            
-        # 【关键招式】：在最右侧（第 3 列）加弹簧，把 Vb 也紧紧往左挤！
-        layout2.setColumnStretch(3, 1)
-        
-        group2.setLayout(layout2)
-        main_h_layout.addWidget(group2, stretch=1) # 右侧组较小，占 1 份宽度
-        
-        self.layout().addLayout(main_h_layout)
-                
-    def setup_board3_channels(self):
-        """设置第三块板卡的通道控制 (紧凑型布局 + 分割线)"""
-        group = QGroupBox("IS I & IS phib控制 (16列)")
-        layout = QGridLayout()
-        layout.setHorizontalSpacing(15) # 设置列之间的固定紧凑间距
-        
-        # --- 总开关 ---
-        self.is_i_master_switch = QCheckBox("IS I 总开关")
-        self.is_i_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.is_i_switches])
-        layout.addWidget(self.is_i_master_switch, 0, 1, 1, 2)
-        
-        self.is_phib_master_switch = QCheckBox("IS phib 总开关")
-        self.is_phib_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.is_phib_switches])
-        layout.addWidget(self.is_phib_master_switch, 0, 4, 1, 2) # 同样跳开第 3 列留给分割线
-        
-        # --- 表头 ---
-        layout.addWidget(QLabel("列"), 1, 0)
-        layout.addWidget(QLabel("IS I 开关"), 1, 1)
-        layout.addWidget(QLabel("IS I 输出值"), 1, 2)
-        # 第 3 列留空
-        layout.addWidget(QLabel("IS phib 开关"), 1, 4)
-        layout.addWidget(QLabel("IS phib 输出值"), 1, 5)
-        
-        # --- 画一根纵贯南北的灰色分割线 ---
-        vline = QFrame()
-        vline.setFrameShape(QFrame.VLine)
-        vline.setFrameShadow(QFrame.Sunken)
-        vline.setStyleSheet("color: #CCCCCC;")
-        layout.addWidget(vline, 1, 3, 17, 1) # 跨越17行
-        
-        self.is_i_switches, self.is_i_values = [], []
-        self.is_phib_switches, self.is_phib_values = [], []
-        
-        # --- 16 路通道循环 ---
-        for i in range(16):
-            row = i + 2
-            layout.addWidget(QLabel(f" {i+1} "), row, 0)
-            
-            # IS I 部分
-            i_switch = QCheckBox()
-            self.is_i_switches.append(i_switch)
-            layout.addWidget(i_switch, row, 1)
-            
-            i_value = QDoubleSpinBox()
-            i_value.setRange(-1000, 1000)
-            i_value.setSuffix(" μA")
-            self.is_i_values.append(i_value)
-            layout.addWidget(i_value, row, 2)
-            
-            # IS phib 部分
-            phib_switch = QCheckBox()
-            self.is_phib_switches.append(phib_switch)
-            layout.addWidget(phib_switch, row, 4)
-            
-            phib_value = QDoubleSpinBox()
-            phib_value.setRange(-1000, 1000)
-            phib_value.setSuffix(" μA")
-            self.is_phib_values.append(phib_value)
-            layout.addWidget(phib_value, row, 5)
-            
-        # 【关键招式】：在最右侧加一个隐形弹簧，把整个矩阵往左压紧！
-        layout.setColumnStretch(6, 1)
-        
-        # 为了让它不过于铺满整个屏幕，我们在右侧再加一个空的水平弹簧外壳
-        wrapper_layout = QHBoxLayout()
-        group.setLayout(layout)
-        wrapper_layout.addWidget(group)
-        wrapper_layout.addStretch() # 这个弹簧防止 groupbox 被拉长
-        
-        self.layout().addLayout(wrapper_layout)
-    def generate_write_packets(self):
-        """扫描当前面板参数，打包"""
-        packets = []
-        
-        board_id = self.board_id + 1  # 板卡 ID 从 1 开始
-        cmd = TDMProtocol.CMD_WRITE
-        
-        #交流直流设置
-        if self.signal_type.currentText() == "交流":
-            # 提取波形类型：0=正弦波, 1=三角波, 2=方波 (刚好对应下拉框的 Index)
-            waveform_idx = self.waveform_type.currentIndex()
-            packets.append(TDMProtocol.pack_frame(
-                cmd, board_id, TDMProtocol.PARAM_WAVEFORM, 1, 0x00, 0x00, waveform_idx, is_float=False))
-            
-            freq = self.frequency.value()
-            packets.append(TDMProtocol.pack_frame(
-                cmd, board_id, TDMProtocol.PARAM_AC_FREQ, 1, 0x00, 0x00, freq, is_float=True))
-                
-            amp = self.amplitude.value()
-            packets.append(TDMProtocol.pack_frame(
-                cmd, board_id, TDMProtocol.PARAM_AC_AMP,  1, 0x00, 0x00, amp, is_float=True))
-        else:
-            dc_val = self.dc_value.value()
-            packets.append(TDMProtocol.pack_frame(
-                cmd, board_id, TDMProtocol.PARAM_DC_VALUE, 1, 0x00, 0x00, dc_val, is_float=True))        
-      # 各板卡打包
-        if self.board_id == 0:  
-            # --- 偏置源板卡 1 (TES: 16列) ---
-            for col in range(16):
-                switch_on = 1 if self.tes_switches[col].isChecked() else 0
-                voltage_val = self.tes_values[col].value()
-                packets.append(TDMProtocol.pack_frame(
-                    cmd, board_id, TDMProtocol.PARAM_TES_V, switch_on, 0x00, col, voltage_val, True))
-                    
-        elif self.board_id == 1:
-            # --- 偏置源板卡 2 (SA Ib/phix, Vb: 16列) ---
-            for col in range(16):
-                # 1. SA Ib
-                ib_on = 1 if self.sa_ib_switches[col].isChecked() else 0
-                ib_val = self.sa_ib_values[col].value()
-                packets.append(TDMProtocol.pack_frame(
-                    cmd, board_id, TDMProtocol.PARAM_SA_IB, ib_on, 0x00, col, ib_val, True))
-                
-                # 2. SA phix
-                phix_on = 1 if self.sa_phix_switches[col].isChecked() else 0
-                phix_val = self.sa_phix_values[col].value()
-                packets.append(TDMProtocol.pack_frame(
-                    cmd, board_id, TDMProtocol.PARAM_SA_PHIX, phix_on, 0x00, col, phix_val, True))
-                
-                # 3. Vb
-                vb_on = 1 if self.vb_switches[col].isChecked() else 0
-                vb_val = self.vb_values[col].value()
-                packets.append(TDMProtocol.pack_frame(
-                    cmd, board_id, TDMProtocol.PARAM_VB, vb_on, 0x00, col, vb_val, True))
-
-        elif self.board_id == 2:
-            # --- 偏置源板卡 3 (IS I/phib: 16列) ---
-            for col in range(16):
-                # 1. IS I
-                i_on = 1 if self.is_i_switches[col].isChecked() else 0
-                i_val = self.is_i_values[col].value()
-                packets.append(TDMProtocol.pack_frame(
-                    cmd, board_id, TDMProtocol.PARAM_IS_I, i_on, 0x00, col, i_val, True))
-                
-                # 2. IS phib
-                phib_on = 1 if self.is_phib_switches[col].isChecked() else 0
-                phib_val = self.is_phib_values[col].value()
-                packets.append(TDMProtocol.pack_frame(
-                    cmd, board_id, TDMProtocol.PARAM_IS_PHIB, phib_on, 0x00, col, phib_val, True))
-            
-        return packets           
-
-
-
-
 class SafeLineEdit(QLineEdit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -764,90 +340,11 @@ class MainWindow(QMainWindow):
         self.init_ui()
         
     
-    def get_adda_adcfb_config(self):
-        config = {'adc': {}, 'fb_dac': {}}
-        for i, sw in enumerate(self.adc_switches):
-            config['adc'][f'sw_{i}'] = sw.checkState()
-        for i, ed in enumerate(self.adc_offset_edits):
-            config['adc'][f'offset_{i}'] = ed.value()
-        for i, sw in enumerate(self.adc_offset_switches):
-            config['adc'][f'offset_sw_{i}'] = sw.checkState()
-            
-        for i, sw in enumerate(self.fb_dac_switches):
-            config['fb_dac'][f'sw_{i}'] = sw.checkState()
-        for i, ed in enumerate(self.fb_dac_offset_edits):
-            config['fb_dac'][f'offset_{i}'] = ed.value()
-        for i, sw in enumerate(self.fb_dac_offset_switches):
-            config['fb_dac'][f'offset_sw_{i}'] = sw.checkState()
-        return {"type": "adda_adcfb", "config": config}
-
-    def set_adda_adcfb_config(self, data):
-        if data.get("type") != "adda_adcfb": return False
-        cfg = data.get("config", {})
-        adc = cfg.get("adc", {})
-        fb = cfg.get("fb_dac", {})
-        for i, sw in enumerate(self.adc_switches):
-            if f'sw_{i}' in adc: sw.setCheckState(adc[f'sw_{i}'])
-        for i, ed in enumerate(self.adc_offset_edits):
-            if f'offset_{i}' in adc: ed.setValue(adc[f'offset_{i}'])
-        for i, sw in enumerate(self.adc_offset_switches):
-            if f'offset_sw_{i}' in adc: sw.setCheckState(adc[f'offset_sw_{i}'])
-            
-        for i, sw in enumerate(self.fb_dac_switches):
-            if f'sw_{i}' in fb: sw.setCheckState(fb[f'sw_{i}'])
-        for i, ed in enumerate(self.fb_dac_offset_edits):
-            if f'offset_{i}' in fb: ed.setValue(fb[f'offset_{i}'])
-        for i, sw in enumerate(self.fb_dac_offset_switches):
-            if f'offset_sw_{i}' in fb: sw.setCheckState(fb[f'offset_sw_{i}'])
-        return True
-
-    def get_adda_gate_config(self):
-        config = {'gate_dac': {}}
-        for i, sw in enumerate(self.gate_dac_switches):
-            config['gate_dac'][f'sw_{i}'] = sw.checkState()
-        for i, ed in enumerate(self.gate_dac_offset_edits):
-            config['gate_dac'][f'offset_{i}'] = ed.value()
-        for i, sw in enumerate(self.gate_dac_offset_switches):
-            config['gate_dac'][f'offset_sw_{i}'] = sw.checkState()
-        return {"type": "adda_gate", "config": config}
-
-    def set_adda_gate_config(self, data):
-        if data.get("type") != "adda_gate": return False
-        cfg = data.get("config", {}).get("gate_dac", {})
-        for i, sw in enumerate(self.gate_dac_switches):
-            if f'sw_{i}' in cfg: sw.setCheckState(cfg[f'sw_{i}'])
-        for i, ed in enumerate(self.gate_dac_offset_edits):
-            if f'offset_{i}' in cfg: ed.setValue(cfg[f'offset_{i}'])
-        for i, sw in enumerate(self.gate_dac_offset_switches):
-            if f'offset_sw_{i}' in cfg: sw.setCheckState(cfg[f'offset_sw_{i}'])
-        return True
-
     def get_fpga_config(self):
-        config = {'pid': {}, 'switches': {}}
-        for row in range(20):
-            for col in range(16):
-                w = self.pid_table.cellWidget(row, col)
-                if w:
-                    config['pid'][f"{row}_{col}"] = w.get_config()
-        config['switches']['data_read'] = self.data_read_switch.checkState()
-        config['switches']['fb_control'] = self.fb_control_switch.checkState()
-        config['switches']['gate_control'] = self.gate_control_switch.checkState()
-        return {"type": "fpga", "config": config}
+        return self.fpga_widget.get_config()
 
     def set_fpga_config(self, data):
-        if data.get("type") != "fpga": return False
-        cfg = data.get("config", {})
-        pid = cfg.get("pid", {})
-        switches = cfg.get("switches", {})
-        for row in range(20):
-            for col in range(16):
-                w = self.pid_table.cellWidget(row, col)
-                if w and f"{row}_{col}" in pid:
-                    w.set_config(pid[f"{row}_{col}"])
-        if 'data_read' in switches: self.data_read_switch.setCheckState(switches['data_read'])
-        if 'fb_control' in switches: self.fb_control_switch.setCheckState(switches['fb_control'])
-        if 'gate_control' in switches: self.gate_control_switch.setCheckState(switches['gate_control'])
-        return True
+        return self.fpga_widget.set_config(data)
 
 
     def save_connection_log(self):
@@ -875,14 +372,6 @@ class MainWindow(QMainWindow):
                 if data:
                     ip = data['board_ip'].replace('.', '_')
                     default_name = f"Bias_{ip}_{ts}.json"
-        elif tab_idx == 2:
-            sub_idx = self.ad_da_sub_tabs.currentIndex()
-            if sub_idx == 0:
-                data = self.get_adda_adcfb_config()
-                default_name = f"ADDA_ADC_FB_{ts}.json"
-            elif sub_idx == 1:
-                data = self.get_adda_gate_config()
-                default_name = f"ADDA_Gate_{ts}.json"
         elif tab_idx == 3:
             data = self.get_fpga_config()
             default_name = f"FPGA_Config_{ts}.json"
@@ -902,7 +391,7 @@ class MainWindow(QMainWindow):
 
     def load_current_page_config(self):
         tab_idx = self.tabs.currentIndex()
-        if tab_idx == 0:
+        if tab_idx in (0, 2, 4):
             self.connection_log.append("[系统] 当前页面不支持读取参数！")
             return
             
@@ -919,17 +408,8 @@ class MainWindow(QMainWindow):
                 bias_board = self.bias_sub_tabs.currentWidget()
                 if bias_board:
                     success, msg = bias_board.set_board_config(data)
-            elif tab_idx == 2:
-                sub_idx = self.ad_da_sub_tabs.currentIndex()
-                if sub_idx == 0:
-                    success = self.set_adda_adcfb_config(data)
-                    msg = "读取成功" if success else "参数类型不匹配"
-                elif sub_idx == 1:
-                    success = self.set_adda_gate_config(data)
-                    msg = "读取成功" if success else "参数类型不匹配"
             elif tab_idx == 3:
-                success = self.set_fpga_config(data)
-                msg = "读取成功" if success else "参数类型不匹配"
+                success, msg = self.set_fpga_config(data)
                 
             if success:
                 self.connection_log.append(f"[系统] 从 {file_path} 读取并恢复了参数")
@@ -940,7 +420,7 @@ class MainWindow(QMainWindow):
             self.connection_log.append(f"[系统] 读取异常: {str(e)}")
 
     def init_ui(self):
-        self.setWindowTitle("TDM Software")
+        self.setWindowTitle("TDM Software V8")
         self.setGeometry(100, 100, 1200, 800)
         
         main_widget = QWidget()
@@ -983,7 +463,7 @@ class MainWindow(QMainWindow):
         # 定义初始状态，并准备一个字典存放标签对象的引用，方便以后动态修改
         status_items = [
             ("通讯状态", "未连接", "red"), ("数据读出", "关", "red"), 
-            ("反馈控制", "关", "red"),     ("选通控制", "关", "red"),
+            ("DFB状态", "关闭", "red"),   ("选通控制", "关", "red"),
             ("FPGA状态", "未知", "gray"),  ("温度监控", "正常", "green")
         ]
         
@@ -1039,6 +519,7 @@ class MainWindow(QMainWindow):
         self.setup_bias_control_tab()
         self.setup_ad_da_tab()
         self.setup_fpga_tab()
+        self.setup_storage_tab()
 
         
     def setup_connection_tab(self):
@@ -1049,9 +530,9 @@ class MainWindow(QMainWindow):
         connection_layout = QGridLayout()  # 创建连接配置组垂直布局
         
         board_configs = [
-            ('偏置源板卡1-TES Bias', 'Bias1',        '192.168.10.16'),
-            ('偏置源板卡2-IS Bias', 'Bias2',        '192.168.10.16'),
-            ('偏置源板卡3-SA Bias', 'Bias3',        '192.168.10.16'),
+            (name, board_type, default_ip)
+            for _, board_type, name, default_ip in BIAS_BOARD_CONFIGS
+        ] + [
             ('ADC 读出板',   'ADC_readout',  '192.168.1.14'),
             ('FB DAC 板',    'FB_DAC',       '192.168.1.15'),
             ('选通 DAC 板',  'gate_DAC',     '192.168.1.16'),
@@ -1168,13 +649,7 @@ class MainWindow(QMainWindow):
         # ================= 2. 将三块板卡加入子标签页 =================
         self.bias_boards = []
         
-        bias_board_configs = [
-            (0, "Bias1", "偏置源板卡1-TES Bias", "192.168.10.16"),
-            (1, "Bias2", "偏置源板卡2-IS Bias", "192.168.10.16"),
-            (2, "Bias3", "偏置源板卡3-SA Bias", "192.168.10.16")
-        ]
-        
-        for i, board_type, tab_name, default_ip in bias_board_configs:
+        for i, board_type, tab_name, default_ip in BIAS_BOARD_CONFIGS:
             # 实例化新的板卡界面
             board_widget = TDMBiasWidget(board_type=board_type, board_name=tab_name, default_ip=default_ip, default_local_ip="192.168.10.100")
             
@@ -1209,93 +684,18 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(widget, "偏置源控制")
    
     def setup_ad_da_tab(self):
-        """AD/DA控制选项卡 (双子标签页架构)"""
-        widget = QWidget()
-        layout = QVBoxLayout()
-        
-        self.ad_da_sub_tabs = QTabWidget()
-        self.ad_da_sub_tabs.setStyleSheet("""
-            QTabWidget::tab-bar { alignment: center; }
-            QTabWidget::pane { border: none; border-top: 1px solid #D0D0D0; margin-top: 5px; }
-            QTabBar::tab {
-                background: #FFFFFF;
-                border: 1px solid #C0C0C0;
-                padding: 6px 20px;
-                color: #333333;
-                font-size: 13px;
-                }
-            QTabBar::tab:first { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
-            QTabBar::tab:last { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
-            QTabBar::tab:!first { margin-left: -1px; }
-            QTabBar::tab:selected {
-                background: #007AFF;
-                color: white;
-                border-color: #007AFF;
-            }
-        """)
-        
-        # ================= 子标签页 1：ADC & FB DAC (左右并排) =================
-        ad_fb_scroll = QScrollArea()
-        ad_fb_scroll.setWidgetResizable(True)
-        ad_fb_scroll.setStyleSheet("QScrollArea { border: none; }")
-        
-        ad_fb_widget = QWidget()
-        ad_fb_layout = QHBoxLayout() # 横向布局，左右对分
-        ad_fb_layout.setSpacing(20)  # 中间留一点空隙
-        
-        # 左侧：ADC
-        adc_container = QWidget()
-        adc_layout = QVBoxLayout()
-        adc_layout.setContentsMargins(0, 0, 0, 0)
-        self.setup_adc_control(adc_layout)
-        adc_layout.addStretch() # 把内容往上顶
-        adc_container.setLayout(adc_layout)
-        ad_fb_layout.addWidget(adc_container, stretch=1) # 占比 1
-        
-        # 右侧：FB DAC
-        fb_container = QWidget()
-        fb_layout = QVBoxLayout()
-        fb_layout.setContentsMargins(0, 0, 0, 0)
-        self.setup_fb_dac_control(fb_layout)
-        fb_layout.addStretch()
-        fb_container.setLayout(fb_layout)
-        ad_fb_layout.addWidget(fb_container, stretch=1) # 占比 1，绝对均分
-        
-        ad_fb_widget.setLayout(ad_fb_layout)
-        ad_fb_scroll.setWidget(ad_fb_widget)
-        self.ad_da_sub_tabs.addTab(ad_fb_scroll, "   ADC FB DAC控制   ")
-        
-        # ================= 子标签页 2：选通 DAC 板 =================
-        gate_scroll = QScrollArea()
-        gate_scroll.setWidgetResizable(True)
-        gate_scroll.setStyleSheet("QScrollArea { border: none; }")
-        
-        gate_widget = QWidget()
-        gate_layout = QVBoxLayout()
-        self.setup_gate_dac_control(gate_layout)
-        gate_layout.addStretch()
-        gate_widget.setLayout(gate_layout)
-        gate_scroll.setWidget(gate_widget)
-        self.ad_da_sub_tabs.addTab(gate_scroll, "   选通 DAC 板   ")
-        
-        layout.addWidget(self.ad_da_sub_tabs)
-        
-        # --- 底部公共控制按钮 ---
-        button_layout = QHBoxLayout()
-        self.read_ad_da_btn = QPushButton("读取参数")
-        self.write_ad_da_btn = QPushButton("写入参数")
-        self.save_ad_da_btn = QPushButton("保存配置")
-        button_layout.addWidget(self.read_ad_da_btn)
-        button_layout.addWidget(self.write_ad_da_btn)
-        button_layout.addWidget(self.save_ad_da_btn)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-        
-        widget.setLayout(layout)
-        self.tabs.addTab(widget, "AD/DA控制")
+        """装配独立的 AD/DA 控制页。"""
+        self.adda_widget = ADDAControlWidget(self)
+        self.tabs.addTab(self.adda_widget, "AD/DA控制")
 
     def setup_fpga_tab(self):
         """FPGA数据汇总选项卡 (顶部双拼布局 + 底部大表格)"""
+        self.fpga_widget = FPGAControlWidget(self)
+        self.fpga_widget.log_signal.connect(self.log_from_fpga_ui)
+        self.fpga_widget.dfb_state_changed.connect(self.on_fpga_dfb_ui_changed)
+        self.tabs.addTab(self.fpga_widget, "FPGA控制")
+        return
+
         widget = QWidget()
         main_layout = QVBoxLayout()
         
@@ -1541,124 +941,6 @@ class MainWindow(QMainWindow):
             self.sys_status_labels["选通控制"].setStyleSheet("color: red; font-size: 13px;")
             self.connection_log.append("选通控制: [ OFF ]")
 
-    def setup_fb_dac_control(self, parent_layout):
-        """FB DAC控制 (紧凑排版 + 呼吸空间)"""
-        group = QGroupBox("FB DAC控制 (16列)")
-        layout = QGridLayout()
-        layout.setHorizontalSpacing(10)
-        
-        # --- 总开关 ---
-        self.fb_dac_master_switch = QCheckBox("DAC 总开关")
-        self.fb_dac_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.fb_dac_switches])
-        layout.addWidget(self.fb_dac_master_switch, 0, 1, 1, 2)
-        
-        self.fb_dac_offset_master_switch = QCheckBox("DAC offset 总开关")
-        self.fb_dac_offset_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.fb_dac_offset_switches])
-        layout.addWidget(self.fb_dac_offset_master_switch, 0, 4, 1, 2)
-        
-        # --- 表头 ---
-        layout.addWidget(QLabel("列"), 1, 0)
-        layout.addWidget(QLabel("DAC开关"), 1, 1)
-        layout.addWidget(QLabel("DAC输出值"), 1, 2)
-        layout.addWidget(QLabel("offset开关"), 1, 4)
-        layout.addWidget(QLabel("offset值"), 1, 5)
-        
-        self.fb_dac_switches, self.fb_dac_values = [], []
-        self.fb_dac_offset_switches, self.fb_dac_offset_values = [], []
-        
-        for i in range(16):
-            row = i + 2
-            layout.addWidget(QLabel(f" {i+1} "), row, 0)
-            
-            # DAC 部分
-            dac_switch = QCheckBox()
-            self.fb_dac_switches.append(dac_switch)
-            layout.addWidget(dac_switch, row, 1)
-            
-            dac_value = QDoubleSpinBox()
-            dac_value.setRange(-10, 10)
-            dac_value.setSuffix(" V")
-            dac_value.setDecimals(3)
-            self.fb_dac_values.append(dac_value)
-            layout.addWidget(dac_value, row, 2)
-            
-            # Offset 部分
-            offset_switch = QCheckBox()
-            self.fb_dac_offset_switches.append(offset_switch)
-            layout.addWidget(offset_switch, row, 4)
-            
-            offset_value = QDoubleSpinBox()
-            offset_value.setRange(-10, 10)
-            offset_value.setSuffix(" V")
-            offset_value.setDecimals(3)
-            self.fb_dac_offset_values.append(offset_value)
-            layout.addWidget(offset_value, row, 5)
-            
-        # 同样的排版魔法
-        layout.setColumnStretch(3, 1) 
-        layout.setColumnStretch(6, 2)
-        
-        group.setLayout(layout)
-        parent_layout.addWidget(group)
-        
-    def setup_adc_control(self, parent_layout):
-        """ADC读出控制 (极致紧凑 + 竖线隔离 + 居左防拉伸)"""
-        group = QGroupBox("ADC读出控制 (16列)")
-        layout = QGridLayout()
-        layout.setHorizontalSpacing(15)
-        
-        self.adc_master_switch = QCheckBox("ADC 总开关")
-        self.adc_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.adc_switches])
-        layout.addWidget(self.adc_master_switch, 0, 1, 1, 2)
-        
-        self.adc_offset_master_switch = QCheckBox("offset 总开关")
-        self.adc_offset_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.adc_offset_switches])
-        layout.addWidget(self.adc_offset_master_switch, 0, 4, 1, 2)
-        
-        layout.addWidget(QLabel("列"), 1, 0)
-        layout.addWidget(QLabel("ADC 开关"), 1, 1)
-        layout.addWidget(QLabel("ADC 输出值"), 1, 2)
-        layout.addWidget(QLabel("offset 开关"), 1, 4)
-        layout.addWidget(QLabel("offset 值"), 1, 5)
-        
-        vline = QFrame()
-        vline.setFrameShape(QFrame.VLine)
-        vline.setStyleSheet("color: #CCCCCC;")
-        layout.addWidget(vline, 1, 3, 17, 1)
-        
-        self.adc_switches, self.adc_values = [], []
-        self.adc_offset_switches, self.adc_offset_values = [], []
-        
-        for i in range(16):
-            row = i + 2
-            layout.addWidget(QLabel(f" {i+1} "), row, 0)
-            
-            s1 = QCheckBox()
-            self.adc_switches.append(s1)
-            layout.addWidget(s1, row, 1)
-            
-            v1 = QDoubleSpinBox()
-            v1.setRange(-10, 10)
-            v1.setSuffix(" V")
-            v1.setDecimals(3)
-            self.adc_values.append(v1)
-            layout.addWidget(v1, row, 2)
-            
-            s2 = QCheckBox()
-            self.adc_offset_switches.append(s2)
-            layout.addWidget(s2, row, 4)
-            
-            v2 = QDoubleSpinBox()
-            v2.setRange(-10, 10)
-            v2.setSuffix(" V")
-            v2.setDecimals(3)
-            self.adc_offset_values.append(v2)
-            layout.addWidget(v2, row, 5)
-            
-        layout.setColumnStretch(6, 1) # 右侧压紧弹簧
-        group.setLayout(layout)
-        parent_layout.addWidget(group)
-
     def probe_single_board(self, board_type):
         ip = self.board_ip_edits[board_type].text().strip()
         port_str = self.board_port_edits[board_type].text().strip()
@@ -1706,122 +988,6 @@ class MainWindow(QMainWindow):
         else:
             pass
 
-    def setup_gate_dac_control(self, parent_layout):
-        """选通DAC控制 (20行矩阵, 极致紧凑 + 竖线隔离 + 居左防拉伸)"""
-        # --- 1. 顶部的参数设置区 ---
-        param_group = QGroupBox("20行选通全局参数设定")
-        param_layout = QGridLayout()
-        param_layout.setHorizontalSpacing(20)
-        
-        param_layout.addWidget(QLabel("波形类型:"), 0, 0)
-        self.gate_waveform = QComboBox()
-        self.gate_waveform.addItems(["某一行DC", "三角波", "方波", "正弦波"])
-        param_layout.addWidget(self.gate_waveform, 0, 1)
-        
-        param_layout.addWidget(QLabel("频率:"), 0, 2)
-        self.gate_frequency = QDoubleSpinBox()
-        self.gate_frequency.setRange(0.1, 100000)
-        self.gate_frequency.setValue(1000)
-        self.gate_frequency.setSuffix(" Hz")
-        param_layout.addWidget(self.gate_frequency, 0, 3)
-        
-        param_layout.addWidget(QLabel("幅值(HEX):"), 1, 0)
-        self.gate_amplitude = QLineEdit("0xFFFF")
-        param_layout.addWidget(self.gate_amplitude, 1, 1)
-        
-        param_layout.addWidget(QLabel("选通开始延迟:"), 1, 2)
-        self.gate_start_delay = QSpinBox()
-        self.gate_start_delay.setRange(0, 10000)
-        self.gate_start_delay.setValue(0)
-        self.gate_start_delay.setSuffix(" ns")
-        param_layout.addWidget(self.gate_start_delay, 1, 3)
-        
-        param_layout.addWidget(QLabel("选通开始稳态:"), 2, 0)
-        self.gate_start_steady = QSpinBox()
-        self.gate_start_steady.setRange(0, 10000)
-        self.gate_start_steady.setValue(100)
-        self.gate_start_steady.setSuffix(" ns")
-        param_layout.addWidget(self.gate_start_steady, 2, 1)
-        
-        param_layout.addWidget(QLabel("选通结束稳态:"), 2, 2)
-        self.gate_end_steady = QSpinBox()
-        self.gate_end_steady.setRange(0, 10000)
-        self.gate_end_steady.setValue(100)
-        self.gate_end_steady.setSuffix(" ns")
-        param_layout.addWidget(self.gate_end_steady, 2, 3)
-        
-        param_layout.setColumnStretch(4, 1) # 把参数区也往左压紧
-        param_group.setLayout(param_layout)
-        
-        # --- 2. 20行的矩阵控制区 ---
-        matrix_group = QGroupBox("20行通道控制")
-        dac_layout = QGridLayout()
-        dac_layout.setHorizontalSpacing(15)
-        
-        self.gate_dac_master_switch = QCheckBox("DAC 总开关")
-        self.gate_dac_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.gate_dac_switches])
-        dac_layout.addWidget(self.gate_dac_master_switch, 0, 1, 1, 2)
-        
-        self.gate_dac_offset_master_switch = QCheckBox("offset 总开关")
-        self.gate_dac_offset_master_switch.stateChanged.connect(lambda state: [s.setChecked(state == 2) for s in self.gate_dac_offset_switches])
-        dac_layout.addWidget(self.gate_dac_offset_master_switch, 0, 4, 1, 2)
-        
-        # 优化表头，去掉“行”字
-        dac_layout.addWidget(QLabel("行"), 1, 0)
-        dac_layout.addWidget(QLabel("DAC 开关"), 1, 1)
-        dac_layout.addWidget(QLabel("DAC 输出值"), 1, 2)
-        dac_layout.addWidget(QLabel("offset 开关"), 1, 4)
-        dac_layout.addWidget(QLabel("offset 值"), 1, 5)
-        
-        # 画贯穿 20 行的垂直分割线
-        vline = QFrame()
-        vline.setFrameShape(QFrame.VLine)
-        vline.setStyleSheet("color: #CCCCCC;")
-        dac_layout.addWidget(vline, 1, 3, 21, 1) # 跨越21行 (20数据+1表头)
-        
-        self.gate_dac_switches, self.gate_dac_values = [], []
-        self.gate_dac_offset_switches, self.gate_dac_offset_values = [], []
-        
-        for i in range(20):
-            row = i + 2
-            dac_layout.addWidget(QLabel(f" {i+1} "), row, 0) # 去掉行字，更极简
-            
-            s1 = QCheckBox()
-            self.gate_dac_switches.append(s1)
-            dac_layout.addWidget(s1, row, 1)
-            
-            v1 = QDoubleSpinBox()
-            v1.setRange(-10, 10)
-            v1.setSuffix(" V")
-            v1.setDecimals(3)
-            self.gate_dac_values.append(v1)
-            dac_layout.addWidget(v1, row, 2)
-            
-            s2 = QCheckBox()
-            self.gate_dac_offset_switches.append(s2)
-            dac_layout.addWidget(s2, row, 4)
-            
-            v2 = QDoubleSpinBox()
-            v2.setRange(-10, 10)
-            v2.setSuffix(" V")
-            v2.setDecimals(3)
-            self.gate_dac_offset_values.append(v2)
-            dac_layout.addWidget(v2, row, 5)
-            
-        dac_layout.setColumnStretch(6, 1)
-        matrix_group.setLayout(dac_layout)
-        
-        # --- 组装选通 DAC 页面 ---
-        wrapper = QHBoxLayout()
-        # 把两块包在一个垂直布局里，再整体靠左
-        left_vbox = QVBoxLayout()
-        left_vbox.addWidget(param_group)
-        left_vbox.addWidget(matrix_group)
-        wrapper.addLayout(left_vbox)
-        wrapper.addStretch()
-        
-        parent_layout.addLayout(wrapper)
-        
     def connect_all_boards(self):
         """一键连接所有板卡 (严格判断状态)"""
         self.connection_log.append(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始尝试连接未连的板卡...")
@@ -1930,6 +1096,77 @@ class MainWindow(QMainWindow):
         # 纯异步发送，无需等待回复
         self.tcp_manager.send_data(board_type, test_frame)
     
+    def setup_storage_tab(self):
+        """数据存储独立一级标签页；本阶段仅迁移现有 UI。"""
+        widget = QWidget()
+        main_layout = QVBoxLayout(widget)
+
+        storage_group = QGroupBox("数据存储设置")
+        storage_layout = QVBoxLayout(storage_group)
+
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("存储路径:"))
+        self.storage_path = QLineEdit()
+        self.storage_path.setPlaceholderText("请选择数据存储路径...")
+        self.storage_path.setReadOnly(True)
+        path_layout.addWidget(self.storage_path, stretch=1)
+        self.browse_path_btn = QPushButton("浏览...")
+        self.browse_path_btn.clicked.connect(self.browse_storage_path)
+        path_layout.addWidget(self.browse_path_btn)
+        storage_layout.addLayout(path_layout)
+
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel("存储格式:"))
+        self.storage_format = QComboBox()
+        self.storage_format.addItems(["二进制(.bin)", "数据(.dat)"])
+        format_layout.addWidget(self.storage_format)
+        format_layout.addSpacing(20)
+        format_layout.addWidget(QLabel("文件前缀:"))
+        self.file_prefix = QLineEdit("TDM_data")
+        self.file_prefix.setMaximumWidth(160)
+        format_layout.addWidget(self.file_prefix)
+        format_layout.addSpacing(20)
+        format_layout.addWidget(QLabel("分卷间隔:"))
+        self.save_interval = QSpinBox()
+        self.save_interval.setRange(1, 86400)
+        self.save_interval.setValue(60)
+        self.save_interval.setSuffix(" 秒")
+        format_layout.addWidget(self.save_interval)
+        format_layout.addStretch()
+        storage_layout.addLayout(format_layout)
+
+        button_layout = QHBoxLayout()
+        self.start_storage_btn = QPushButton("开始存储")
+        self.stop_storage_btn = QPushButton("停止存储")
+        self.stop_storage_btn.setEnabled(False)
+        self.storage_status_label = QLabel("状态：未存储")
+        self.storage_status_label.setStyleSheet("color: #616161; font-weight: bold;")
+        button_layout.addWidget(self.start_storage_btn)
+        button_layout.addWidget(self.stop_storage_btn)
+        button_layout.addSpacing(20)
+        button_layout.addWidget(self.storage_status_label)
+        button_layout.addStretch()
+        storage_layout.addLayout(button_layout)
+
+        note = QLabel("当前阶段仅完成数据存储页面迁移，数据接收、落盘和分卷逻辑尚未接入。")
+        note.setStyleSheet("color: #607D8B;")
+        storage_layout.addWidget(note)
+
+        main_layout.addWidget(storage_group)
+        main_layout.addStretch()
+        self.tabs.addTab(widget, "数据存储")
+
+    def log_from_fpga_ui(self, msg):
+        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
+    def on_fpga_dfb_ui_changed(self, enabled):
+        label = self.sys_status_labels.get("DFB状态")
+        if not label:
+            return
+        label.setText("开启" if enabled else "关闭")
+        color = "green" if enabled else "red"
+        label.setStyleSheet(f"color: {color}; font-size: 13px;")
+
     def browse_storage_path(self):
         """浏览并选择存储路径"""
         directory = QFileDialog.getExistingDirectory(
@@ -1944,26 +1181,6 @@ class MainWindow(QMainWindow):
             self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 存储路径已更新: {directory}")
 
                 
-    def on_write_bias_clicked(self):
-        """写入参数按钮的槽函数"""
-        #获取当前选中的板卡索引
-        current_index = self.bias_sub_tabs.currentIndex()
-        current_board_widget = self.bias_boards[current_index]
-        board_type = f"Bias{current_index+1}"
-        if not self.tcp_manager.is_connected(board_type):
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 错误: {board_type} 尚未连接！")
-            QMessageBox.warning(self, "警告", f"尚未连接 {board_type} 板卡！")
-            return         
-        
-        try:
-            packets = current_board_widget.generate_write_packets()
-            for pkt in packets:
-                self.tcp_manager.send_data(board_type, pkt)
-                
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 已向 {board_type} 发送写入指令 ({len(packets)} 条)")           
-        except Exception as e:
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {board_type} 写入失败: {str(e)}")
- 
 # PID交互
 # ================= PID 矩阵交互与智能对比逻辑 =================
 
