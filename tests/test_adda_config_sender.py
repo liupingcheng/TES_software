@@ -1,10 +1,13 @@
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+V8_DIRECTORY = Path(__file__).resolve().parents[1] / "TDM_V8"
+sys.path.insert(0, str(V8_DIRECTORY))
 
 from PyQt5.QtTest import QSignalSpy, QTest
 from PyQt5.QtWidgets import QApplication

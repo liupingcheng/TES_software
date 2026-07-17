@@ -16,7 +16,8 @@ def byte12ToInt(byte12):
 #''代表服务器为 localhost
 myHost = '192.168.10.16'
 #在一个非保留端口号上进行监听
-myPort = 24
+# myPort = 24
+myPort = 5024
 #设置一个TCP socket对象
 sockobj = socket(AF_INET, SOCK_STREAM)
 #sockobj.bind(("", 5001))

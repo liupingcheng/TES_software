@@ -1,8 +1,15 @@
-from PyQt5.QtCore import QCoreApplication
-from tcp_client import TCPClient
 import sys
 import threading
 import time
+from pathlib import Path
+
+from PyQt5.QtCore import QCoreApplication
+
+
+V8_DIRECTORY = Path(__file__).resolve().parents[1] / "TDM_V8"
+sys.path.insert(0, str(V8_DIRECTORY))
+
+from tcp_client import TCPClient
 
 app = QCoreApplication(sys.argv)
 client = TCPClient()
