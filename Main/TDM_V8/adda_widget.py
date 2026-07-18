@@ -1,6 +1,6 @@
 """Clock, ADC, DAC, and FPGA configuration entry page."""
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPalette
 from PyQt5.QtWidgets import (
     QFrame,
@@ -46,34 +46,38 @@ MODULE_SPECS = (
 
 
 class SafeLineEdit(QLineEdit):
-    """Require Enter to commit; Escape or focus loss restores the old value."""
+    """仅允许回车提交；Esc 或未提交失焦时恢复原值。"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._committed_value = self.text()
+        self._original_value = self.text()
 
     def set_committed_text(self, text):
-        self._committed_value = str(text)
-        self.setText(self._committed_value)
+        self._original_value = str(text)
+        self.setText(self._original_value)
 
     def focusInEvent(self, event):
         super().focusInEvent(event)
-        self._committed_value = self.text()
-        self.selectAll()
+        self._original_value = self.text()
+        self.setStyleSheet("background-color: #FFFF99;")
+        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             super().keyPressEvent(event)
-            self._committed_value = self.text()
+            self._original_value = self.text()
+            self.setStyleSheet("")
             self.clearFocus()
         elif event.key() == Qt.Key_Escape:
-            self.setText(self._committed_value)
+            self.setText(self._original_value)
+            self.setStyleSheet("")
             self.clearFocus()
         else:
             super().keyPressEvent(event)
 
     def focusOutEvent(self, event):
-        self.setText(self._committed_value)
+        self.setText(self._original_value)
+        self.setStyleSheet("")
         super().focusOutEvent(event)
 
 
