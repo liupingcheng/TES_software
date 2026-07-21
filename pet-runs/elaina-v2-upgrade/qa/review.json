@@ -1,0 +1,1001 @@
+{
+  "ok": true,
+  "frames_root": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames",
+  "states": [
+    "idle",
+    "running-right",
+    "running-left",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review"
+  ],
+  "errors": [],
+  "warnings": [
+    "idle used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "running-right used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "running-left used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "waving used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "jumping used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "failed used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "waiting used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "running used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "review used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+  ],
+  "rows": [
+    {
+      "state": "idle",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "idle used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/idle/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18673,
+          "bbox": [
+            17,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 27
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/idle/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18654,
+          "bbox": [
+            17,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 33
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/idle/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18420,
+          "bbox": [
+            17,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 35
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/idle/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18669,
+          "bbox": [
+            17,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 29
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/idle/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18446,
+          "bbox": [
+            17,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 35
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/idle/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18431,
+          "bbox": [
+            18,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 32
+        }
+      ]
+    },
+    {
+      "state": "running-right",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "running-right used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18700,
+          "bbox": [
+            19,
+            6,
+            172,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 74
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19623,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 83
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19610,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 74
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19558,
+          "bbox": [
+            16,
+            6,
+            176,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 83
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19297,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 85
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19419,
+          "bbox": [
+            17,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 80
+        },
+        {
+          "index": 6,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19273,
+          "bbox": [
+            17,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 64
+        },
+        {
+          "index": 7,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-right/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18926,
+          "bbox": [
+            17,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 81
+        }
+      ]
+    },
+    {
+      "state": "running-left",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "running-left used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18926,
+          "bbox": [
+            17,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 81
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19259,
+          "bbox": [
+            17,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 62
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19408,
+          "bbox": [
+            17,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 75
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19312,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 82
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19558,
+          "bbox": [
+            16,
+            6,
+            176,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 83
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19589,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 78
+        },
+        {
+          "index": 6,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19598,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 83
+        },
+        {
+          "index": 7,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running-left/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18716,
+          "bbox": [
+            19,
+            6,
+            172,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 80
+        }
+      ]
+    },
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 4,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "waving used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waving/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15084,
+          "bbox": [
+            29,
+            6,
+            163,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 2
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waving/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15151,
+          "bbox": [
+            28,
+            6,
+            164,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 7
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waving/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15161,
+          "bbox": [
+            29,
+            6,
+            163,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 5
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waving/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15188,
+          "bbox": [
+            28,
+            6,
+            163,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 7
+        }
+      ]
+    },
+    {
+      "state": "jumping",
+      "expected_frames": 5,
+      "actual_frames": 5,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "jumping used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/jumping/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20189,
+          "bbox": [
+            6,
+            15,
+            186,
+            191
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 52
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/jumping/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21117,
+          "bbox": [
+            6,
+            8,
+            186,
+            198
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 55
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/jumping/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22435,
+          "bbox": [
+            6,
+            8,
+            186,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 49
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/jumping/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21798,
+          "bbox": [
+            6,
+            8,
+            186,
+            198
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 60
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/jumping/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20722,
+          "bbox": [
+            6,
+            13,
+            186,
+            193
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 61
+        }
+      ]
+    },
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "failed used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17134,
+          "bbox": [
+            30,
+            6,
+            162,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 56
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 19301,
+          "bbox": [
+            23,
+            6,
+            169,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 59
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21739,
+          "bbox": [
+            16,
+            6,
+            175,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 121
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 22079,
+          "bbox": [
+            15,
+            6,
+            176,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 51
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21331,
+          "bbox": [
+            18,
+            6,
+            173,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 90
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21475,
+          "bbox": [
+            15,
+            6,
+            177,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 130
+        },
+        {
+          "index": 6,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18484,
+          "bbox": [
+            25,
+            6,
+            167,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 67
+        },
+        {
+          "index": 7,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/failed/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16668,
+          "bbox": [
+            30,
+            6,
+            161,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 33
+        }
+      ]
+    },
+    {
+      "state": "waiting",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "waiting used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waiting/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15836,
+          "bbox": [
+            28,
+            6,
+            163,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 19
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waiting/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16420,
+          "bbox": [
+            26,
+            6,
+            165,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 34
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waiting/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16005,
+          "bbox": [
+            28,
+            6,
+            164,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 33
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waiting/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15839,
+          "bbox": [
+            27,
+            6,
+            164,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 24
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waiting/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17341,
+          "bbox": [
+            18,
+            6,
+            174,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 51
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/waiting/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15850,
+          "bbox": [
+            29,
+            6,
+            162,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 37
+        }
+      ]
+    },
+    {
+      "state": "running",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "running used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20915,
+          "bbox": [
+            6,
+            7,
+            186,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 47
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21145,
+          "bbox": [
+            6,
+            6,
+            186,
+            201
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 48
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20583,
+          "bbox": [
+            8,
+            6,
+            183,
+            201
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 40
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20882,
+          "bbox": [
+            6,
+            7,
+            186,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 50
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 20684,
+          "bbox": [
+            7,
+            6,
+            185,
+            201
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 35
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/running/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 21036,
+          "bbox": [
+            6,
+            7,
+            186,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 49
+        }
+      ]
+    },
+    {
+      "state": "review",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "review used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/review/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17108,
+          "bbox": [
+            23,
+            6,
+            167,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 20
+        },
+        {
+          "index": 1,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/review/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15848,
+          "bbox": [
+            35,
+            6,
+            156,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 28
+        },
+        {
+          "index": 2,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/review/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16116,
+          "bbox": [
+            35,
+            6,
+            156,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 28
+        },
+        {
+          "index": 3,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/review/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15820,
+          "bbox": [
+            34,
+            6,
+            156,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 30
+        },
+        {
+          "index": 4,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/review/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17554,
+          "bbox": [
+            27,
+            6,
+            163,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 20
+        },
+        {
+          "index": 5,
+          "file": "/Users/liupingcheng/Nutstore Files/.symlinks/\u575a\u679c\u4e91/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/frames/review/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17063,
+          "bbox": [
+            21,
+            6,
+            170,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 23
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "decision": "accept_preserved_source",
+  "reviewed_by": "parent",
+  "scope": "existing approved 8x9 atlas supplied as the upgrade target",
+  "evidence": [
+    "The same face, silver hair, pixel-art rendering, proportions, white-and-gold details, dark boots, and blue-tipped wand recur across the standard rows.",
+    "The dark hat, cloak, and broom form a coherent movement-state costume used in running-right, running-left, jumping, and running; their presence is a deliberate state family rather than random generation drift.",
+    "The user requested a v2 look-direction upgrade of this installed pet, so rows 0-8 are preserved byte-for-byte from the source atlas and only rows 9-10 are new."
+  ],
+  "accepted_warnings": [
+    "Legacy state-specific costume and broom variation differs from the strict newest-row visual ideal.",
+    "Legacy non-directional running row uses the movement-state broom family."
+  ],
+  "hard_failures_remaining": []
+}

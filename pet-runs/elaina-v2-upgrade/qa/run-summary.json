@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "spriteVersionNumber": 2,
+  "run_dir": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade",
+  "spritesheet": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/final/spritesheet-extended.webp",
+  "validation": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/final/validation-extended.json",
+  "installed_validation": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/final/validation-installed.json",
+  "chroma_despill": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/chroma-despill-extended.json",
+  "contact_sheet": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/contact-sheet-extended.png",
+  "direction_sheet": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/look-directions.png",
+  "direction_semantics": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/direction-semantics.json",
+  "blind_direction_validation": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/direction-blind-validation.json",
+  "blind_review_resolution": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/blind-review-resolution.json",
+  "continuity": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/look-continuity.json",
+  "review": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/review.json",
+  "final_visual_qa": "/Users/liupingcheng/Nutstore Files/.symlinks/坚果云/AI/project/TES/TES_software/pet-runs/elaina-v2-upgrade/qa/final-visual-qa.json",
+  "package": "/Users/liupingcheng/.codex/pets/elaina-2",
+  "installed_sha256": "cde14844173cbb64a213a5779ab36233d7b4e2495481e3331812cf04cf42f5a4",
+  "accepted_warnings": [
+    "Minor intermediate direction ambiguity near principal axes.",
+    "Minor continuity diff outliers accepted per user instruction.",
+    "Existing rows 0-8 preserve the source pet's intentional state-specific outfit variation."
+  ]
+}

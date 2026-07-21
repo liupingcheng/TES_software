@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "reviewed_by": "parent",
+  "attempt": "corrected cardinal basis, second row-level semantic repair",
+  "registered_strip": "qa/look-row-9-registered.png",
+  "edge_check": {
+    "verdict": "pass",
+    "evidence": "Deterministic pose-group registration completed without near-edge errors and all eight complete sprites retain padding."
+  },
+  "continuity": {
+    "verdict": "pass",
+    "evidence": "The face advances from frontal up to a literal screen-right profile at 090, then returns toward frontal down across the last three cells; the lower body, scale, baseline, wand hand, and boots remain registered."
+  },
+  "semantics": [
+    {"direction":"000","verdict":"pass","expected":"up","observed":"frontal face with raised pupils and lifted chin","reason":"clear upward gaze"},
+    {"direction":"022.5","verdict":"pass","expected":"up-right","observed":"raised pupils with a slight screen-right turn","reason":"first upper-right step"},
+    {"direction":"045","verdict":"pass","expected":"up-right","observed":"screen-right three-quarter face with raised gaze","reason":"both axes visible"},
+    {"direction":"067.5","verdict":"pass","expected":"up-right","observed":"near-right profile retaining upward eye pitch","reason":"continuous approach to 090"},
+    {"direction":"090","verdict":"pass","expected":"right","observed":"nose and face plane protrude toward the image's right edge with hair trailing left","reason":"unmistakable screen-right cardinal"},
+    {"direction":"112.5","verdict":"pass","expected":"down-right","observed":"lowered gaze with a residual screen-right face bias","reason":"begins the return toward down"},
+    {"direction":"135","verdict":"warning","expected":"down-right","observed":"clearly downcast near-frontal pose with only a subtle right cue","reason":"horizontal axis is subtle, but labeled order and continuing arc confirm the quadrant"},
+    {"direction":"157.5","verdict":"warning","expected":"down-right","observed":"almost-frontal down pose with a very slight right bias","reason":"correctly lands one step before 180; subtle horizontal cue is review-only"}
+  ]
+}

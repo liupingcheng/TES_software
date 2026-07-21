@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "reviewed_by": "parent_and_independent_final_visual_qa",
+  "user_quality_instruction": "Accept an approximately correct, usable result; do not over-polish minor intermediate transitions.",
+  "directions": [
+    {"direction":"000","verdict":"pass","expected":"up","observed":"frontal raised gaze and lifted face","reason":"up cardinal is unmistakable"},
+    {"direction":"022.5","verdict":"warning","expected":"up-right","observed":"clear up cue with subtle horizontal cue","reason":"blind horizontal axis was ambiguous, but labeled loop begins toward the right"},
+    {"direction":"045","verdict":"pass","expected":"up-right","observed":"right three-quarter head with raised gaze","reason":"both axes readable in labeled review"},
+    {"direction":"067.5","verdict":"pass","expected":"up-right","observed":"near-right profile on the upper arc","reason":"ordered loop advances toward 090"},
+    {"direction":"090","verdict":"pass","expected":"right","observed":"nose and face profile point to the literal image-right edge","reason":"horizontal cardinal passed strict blind majority"},
+    {"direction":"112.5","verdict":"warning","expected":"down-right","observed":"down cue is clear while horizontal cue is subtle/inconsistently read","reason":"accepted intermediate warning; labeled order remains on the right-to-down arc"},
+    {"direction":"135","verdict":"warning","expected":"down-right","observed":"downcast near-frontal pose with subtle right bias","reason":"accepted intermediate blind disagreement; no cardinal reversal"},
+    {"direction":"157.5","verdict":"warning","expected":"down-right","observed":"near-frontal down pose one step before 180","reason":"horizontal cue is subtle but boundary meaning is correct"},
+    {"direction":"180","verdict":"pass","expected":"down","observed":"low pupils, heavy eyelids, and tucked chin","reason":"down cardinal passed strict blind majority"},
+    {"direction":"202.5","verdict":"warning","expected":"down-left","observed":"down cue is clear with subtle left cue","reason":"accepted intermediate warning close to the vertical axis"},
+    {"direction":"225","verdict":"warning","expected":"down-left","observed":"down-left three-quarter family but blind horizontal sign disagreed","reason":"accepted labeled-loop warning; cardinal basis remains correct"},
+    {"direction":"247.5","verdict":"warning","expected":"down-left","observed":"near-left profile with restrained down cue","reason":"accepted intermediate axis uncertainty"},
+    {"direction":"270","verdict":"pass","expected":"left","observed":"nose and face profile point to the literal image-left edge","reason":"horizontal cardinal passed strict blind majority"},
+    {"direction":"292.5","verdict":"warning","expected":"up-left","observed":"left-facing pose with subtle vertical cue","reason":"blind vertical axis was ambiguous; labeled loop rises after 270"},
+    {"direction":"315","verdict":"warning","expected":"up-left","observed":"left-biased near-frontal face with subtle up cue","reason":"accepted intermediate vertical ambiguity"},
+    {"direction":"337.5","verdict":"warning","expected":"up-left","observed":"near-frontal raised gaze with subtle left cue","reason":"accepted near-axis ambiguity; closes into 000"}
+  ],
+  "failures": []
+}

@@ -1,0 +1,12 @@
+{
+  "visual_qa": "pass",
+  "qa_note": "Elaina's pixel identity, complete standard rows, transparent 8x11 v2 atlas, cardinal directions, and usable clockwise look loop visually pass with no clipping or attachment failures.",
+  "direction_semantics": "000 up pass; 090 screen-right pass; 180 down pass; 270 screen-left pass; intermediate axis ambiguity accepted as warning",
+  "review_warnings": [
+    "Stable-slots extraction review warning for preserved standard rows.",
+    "Accepted intermediate blind-axis ambiguity.",
+    "Minor continuity outliers at 090->112.5, 157.5->180, and 202.5->225."
+  ],
+  "repair_rows": [],
+  "repair_notes": []
+}

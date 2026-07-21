@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "reviewed_by": "parent",
+  "attempt": "corrected cardinal basis, down-cardinal row-level repair",
+  "source_strip": "decoded/look-row-10.png",
+  "assembled_atlas": "final/spritesheet-extended.webp",
+  "edge_check": {
+    "verdict": "pass",
+    "evidence": "Deterministic assembly recovered eight ordered pose groups at the approved row-9 scale without near-edge errors; all sprites retain padding."
+  },
+  "continuity": {
+    "verdict": "pass",
+    "evidence": "The row begins in a clear down pose continuing from 157.5, turns progressively through a literal screen-left profile, and returns toward frontal up at 337.5. Boots, body scale, baseline, wand attachment, and lower-torso registration stay stable."
+  },
+  "semantics": [
+    {"direction":"180","verdict":"pass","expected":"down","observed":"frontal face with low pupils, heavy upper lids, and tucked chin","reason":"unmistakable downward cardinal"},
+    {"direction":"202.5","verdict":"warning","expected":"down-left","observed":"downcast near-frontal face beginning to shift left","reason":"horizontal cue is subtle but the labeled arc progresses correctly"},
+    {"direction":"225","verdict":"pass","expected":"down-left","observed":"screen-left three-quarter face retaining low gaze","reason":"both required axes visible"},
+    {"direction":"247.5","verdict":"warning","expected":"down-left","observed":"near-left profile with a restrained low-eye cue","reason":"vertical axis is subtle but continuity into 270 is correct"},
+    {"direction":"270","verdict":"pass","expected":"left","observed":"nose and face plane protrude toward the image's left edge with hair trailing right","reason":"unmistakable screen-left cardinal"},
+    {"direction":"292.5","verdict":"pass","expected":"up-left","observed":"left three-quarter face with pupils beginning to rise","reason":"first even step above 270"},
+    {"direction":"315","verdict":"pass","expected":"up-left","observed":"more frontal face with raised pupils and left bias","reason":"both required axes visible"},
+    {"direction":"337.5","verdict":"pass","expected":"up-left","observed":"almost-frontal raised gaze retaining slight screen-left bias","reason":"one restrained step before 000"}
+  ]
+}
