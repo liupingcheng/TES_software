@@ -17,7 +17,6 @@ from PyQt5.QtCore import Qt, QByteArray, QSettings, QThread, pyqtSignal, QEvent,
 from PyQt5.QtGui import QFont, QBrush, QColor, QDesktopServices, QPalette
 
 from tcp_manager import TCPManager
-from protocol import TDMProtocol
 from tdm_bias_widget import TDMBiasWidget
 from fpga_widget import FPGAControlWidget
 from adda_widget import ADDAControlWidget
@@ -173,19 +172,11 @@ class QDoubleSpinBox(_QDoubleSpinBox):
     def wheelEvent(self, event):
         event.ignore()
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        # 点击单位区域时也能激活编辑：延迟全选数字部分
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, self.selectAll)
-
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self._original_value = self.value() # 记下修改前的值
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -340,18 +331,11 @@ class QSpinBox(_QSpinBox):
     def wheelEvent(self, event):
         event.ignore()
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, self.selectAll)
-
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self._original_value = self.value()
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -380,8 +364,6 @@ class SafeLineEdit(QLineEdit):
         super().focusInEvent(event)
         self._original_value = self.text()
         self.setStyleSheet("background-color: #FFFF99;")
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -1798,33 +1780,6 @@ class MainWindow(QMainWindow):
         status = "Test Link Success" if success else "Test Link Failed"
         self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {status}: {board_type} {msg}")
 
-    def on_test_send_clicked(self):
-        """点击测试发送按钮"""
-        board_type = self.test_board_selector.currentText()
-        
-        if not self.tcp_manager.is_connected(board_type):
-            self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 错误: {board_type} 尚未连接！")
-            return
-            
-        # =================【模拟生成二进制指令】=================
-        test_frame = TDMProtocol.pack_frame(
-            cmd_type=0x01, 
-            board_id=0x01, 
-            param_id=0x02, 
-            channel_state=1,
-            row_id=0xFF, 
-            col_id=0x05, 
-            value=-1.25, 
-            is_float=True
-        )
-        
-        hex_str = ' '.join([f'{b:02X}' for b in test_frame])
-        self.connection_log.append(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] -> 发送给 {board_type}:")
-        self.connection_log.append(f"HEX: {hex_str}")
-        
-        # 纯异步发送，无需等待回复
-        self.tcp_manager.send_data(board_type, test_frame)
-    
     def setup_storage_tab(self):
         """数据存储独立一级标签页；本阶段仅迁移现有 UI。"""
         widget = QWidget()
@@ -2069,6 +2024,7 @@ class MainWindow(QMainWindow):
 
     def on_fpga_cell_write_requested(self, cells):
         if not self.tcp_manager.is_connected("fpga"):
+            self.fpga_widget.finish_cell_write(cells, False)
             message = "FPGA算法板卡未连接，Cell 指令未发送。"
             self.log_from_fpga_ui(f"[FPGA] {message}")
             QMessageBox.warning(self, "配置失败", message)
@@ -2077,6 +2033,7 @@ class MainWindow(QMainWindow):
         payload = self._build_fpga_cell_write_payload(cells)
         if self.tcp_manager.send_data("fpga", payload):
             self.fpga_widget.mark_cells_written(cells)
+            self.fpga_widget.finish_cell_write(cells, True)
             self.log_from_fpga_ui(
                 f"[FPGA] Cell 逐个写入指令已发送："
                 f"cells={len(cells)}, commands={len(payload) // 8}, "
@@ -2085,11 +2042,13 @@ class MainWindow(QMainWindow):
             return
 
         message = "Cell 指令发送失败，Cell 状态未更改。"
+        self.fpga_widget.finish_cell_write(cells, False)
         self.log_from_fpga_ui(f"[FPGA] {message}")
         QMessageBox.warning(self, "配置失败", message)
 
     def on_fpga_all_cells_write_requested(self, cells, default_parameters):
         if not self.tcp_manager.is_connected("fpga"):
+            self.fpga_widget.finish_cell_write(cells, False)
             message = "FPGA算法板卡未连接，全部 Cell 指令未发送。"
             self.log_from_fpga_ui(f"[FPGA] {message}")
             QMessageBox.warning(self, "配置失败", message)
@@ -2109,6 +2068,7 @@ class MainWindow(QMainWindow):
 
         if self.tcp_manager.send_data("fpga", payload):
             self.fpga_widget.mark_cells_written(cells)
+            self.fpga_widget.finish_cell_write(cells, True)
             self.log_from_fpga_ui(
                 f"[FPGA] 全部 Cell {write_method}指令已发送："
                 f"cells={len(cells)}, commands={len(payload) // 8}, "
@@ -2117,6 +2077,7 @@ class MainWindow(QMainWindow):
             return
 
         message = f"全部 Cell {write_method}指令发送失败，Cell 状态未更改。"
+        self.fpga_widget.finish_cell_write(cells, False)
         self.log_from_fpga_ui(f"[FPGA] {message}")
         QMessageBox.warning(self, "配置失败", message)
 

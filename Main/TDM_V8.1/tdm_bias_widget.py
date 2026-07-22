@@ -15,8 +15,6 @@ class SafeLineEdit(QLineEdit):
         super().focusInEvent(event)
         self._original_value = self.text()
         self.setStyleSheet("background-color: #FFFF99;")
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):

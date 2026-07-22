@@ -107,7 +107,6 @@ class UIntLineEdit(QLineEdit):
         super().focusInEvent(event)
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -150,16 +149,11 @@ class ConfirmSpinBox(QSpinBox):
     def wheelEvent(self, event):
         event.ignore()
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        QTimer.singleShot(0, self.selectAll)
-
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self._committed_value = self.value()
         self._is_editing = True
         self.setStyleSheet("background-color: #FFFF99;")
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -390,12 +384,12 @@ class CellStatusButton(QToolButton):
         self.refresh_style()
 
     def refresh_style(self):
-        if self.write_mismatch:
-            background = "#BBDEFB"
-            state_text = "已写入"
-        elif not self.has_parameters:
+        if not self.has_parameters:
             background = "#E0E0E0"
             state_text = "无参数"
+        elif self.write_mismatch:
+            background = "#BBDEFB"
+            state_text = "已写入"
         elif self.written:
             background = "#C8E6C9"
             state_text = "已写入"
@@ -869,10 +863,16 @@ class FPGAControlWidget(QWidget):
 
         action_layout = QHBoxLayout()
         action_layout.setSpacing(8)
+        self.cell_write_status_label = QLabel(
+            "写入状态：空闲    进度：0/0    当前：[-,-]"
+        )
+        self.cell_write_status_label.setObjectName("fpga_cell_write_status")
+        self.cell_write_status_label.setStyleSheet("color: #546E7A;")
         self.write_cells_btn = QPushButton("写入预选")
         self.write_cells_btn.setMinimumHeight(32)
         self.write_all_cells_btn = QPushButton("全部写入")
         self.write_all_cells_btn.setMinimumHeight(32)
+        action_layout.addWidget(self.cell_write_status_label)
         action_layout.addStretch()
         action_layout.addWidget(self.write_cells_btn)
         action_layout.addWidget(self.write_all_cells_btn)
@@ -1292,8 +1292,8 @@ class FPGAControlWidget(QWidget):
 
     def _request_cell_write(self):
         if self.dfb_switch.isChecked():
-            QMessageBox.warning(self, "DFB 已开启", "修改Cell参数前请关闭DFB")
-            self.log_signal.emit("[FPGA UI] 修改Cell参数前请关闭DFB")
+            QMessageBox.warning(self, "DFB 已开启", "写入Cell参数前请关闭DFB")
+            self.log_signal.emit("[FPGA UI] 写入Cell参数前请关闭DFB")
             return
         selected = self._selected_keys()
         if not selected:
@@ -1303,12 +1303,13 @@ class FPGAControlWidget(QWidget):
             self._cell_write_payload(self._cell_for(row, col))
             for row, col in sorted(selected)
         ]
+        self._begin_cell_write_status(selected_cells)
         self.cell_write_requested.emit(selected_cells)
 
     def _request_all_cells_write(self):
         if self.dfb_switch.isChecked():
-            QMessageBox.warning(self, "DFB 已开启", "修改Cell参数前请关闭DFB")
-            self.log_signal.emit("[FPGA UI] 修改Cell参数前请关闭DFB")
+            QMessageBox.warning(self, "DFB 已开启", "写入Cell参数前请关闭DFB")
+            self.log_signal.emit("[FPGA UI] 写入Cell参数前请关闭DFB")
             return
         try:
             default_parameters = {
@@ -1321,7 +1322,32 @@ class FPGAControlWidget(QWidget):
             QMessageBox.warning(self, "参数错误", str(exc))
             return
         all_cells = [self._cell_write_payload(cell) for cell in self.cells]
+        self._begin_cell_write_status(all_cells)
         self.all_cells_write_requested.emit(all_cells, default_parameters)
+
+    def _set_cell_write_status(self, state, completed, total, current=None):
+        if current is None:
+            current_text = "[-,-]"
+        else:
+            current_text = f"[{current['row'] + 1},{current['col'] + 1}]"
+        self.cell_write_status_label.setText(
+            f"写入状态：{state}    进度：{completed}/{total}    "
+            f"当前：{current_text}"
+        )
+
+    def _begin_cell_write_status(self, cells):
+        total = len(cells)
+        current = cells[0] if cells else None
+        self._set_cell_write_status("写入中", 0, total, current)
+
+    def finish_cell_write(self, cells, success):
+        total = len(cells)
+        if success:
+            current = cells[-1] if cells else None
+            self._set_cell_write_status("完成", total, total, current)
+        else:
+            current = cells[0] if cells else None
+            self._set_cell_write_status("失败", 0, total, current)
 
     def mark_cells_written(self, written_cells):
         parameter_keys = ("kp", "ki", "adc_offset", "dac_offset")

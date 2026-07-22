@@ -1,6 +1,6 @@
 """Clock, ADC, DAC, and FPGA configuration entry page."""
 
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPalette
 from PyQt5.QtWidgets import (
     QFrame,
@@ -27,13 +27,13 @@ MODULE_SPECS = (
     (
         "FB_DAC",
         "DFB DAC板卡",
-        (("dac_registers", "DAC板卡寄存器配置"),),
+        (("dac_registers", "DFB DAC板卡寄存器配置"),),
         (("dac", "DAC 配置文件"),),
     ),
     (
         "gate_DAC",
         "选通 DAC板卡",
-        (("dac_registers", "DAC板卡寄存器配置"),),
+        (("dac_registers", "选通 DAC板卡寄存器配置"),),
         (("dac", "DAC 配置文件"),),
     ),
     (
@@ -60,7 +60,6 @@ class SafeLineEdit(QLineEdit):
         super().focusInEvent(event)
         self._original_value = self.text()
         self.setStyleSheet("background-color: #FFFF99;")
-        QTimer.singleShot(0, self.selectAll)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
